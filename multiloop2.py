@@ -2,56 +2,20 @@
 
 '''
 Optimization of magnetic configuration created by two spirals.
+Saving resuts to file, no plotting.
 '''
 import os
+import sys
 from dataclasses import dataclass, fields
 from scipy.optimize import minimize
 import scipy.integrate as integrate
 from itertools import combinations
 from datetime import datetime
 import numpy as np
+import random
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import matplotlib.lines as lines
-import random
-
-def spiral_demo():
-    '''
-    A spiral is modeled by a family of concentric circles.  This
-    looks okay, because the mean radial current due to the converging
-    spiral is compensated by the outgoing straight wire in the opposite
-    direction.
-    '''
-    fig = plt.figure(figsize=(12,8))
-    ax  = fig.add_subplot(1, 1, 1)
-    for i in range(10):
-        ax.add_patch(Circle((-1.5, 0), 0.5+0.1*i, lw=1, alpha=0.7,
-                            facecolor='none', edgecolor='blue'))
-    tt = np.linspace(0, 20*np.pi, 1000, endpoint=False)
-    rr = 0.5 + 1.0*tt/(20*np.pi)
-    xx = 1.5 + rr*np.cos(tt)
-    yy = 0.0 + rr*np.sin(tt)
-    ax.plot(xx, yy, color='red', lw=1)
-    ax.add_artist(lines.Line2D([xx[0], xx[-1]+0.1], [yy[0], 0], linewidth=1, color='red'))
-    ax.add_artist(lines.Line2D([xx[-1], xx[-1]+0.1], [yy[-1], yy[-1]], linewidth=1, color='red'))
-    ax.set_aspect('equal')
-    plt.show()
-
-def ex_spiral_demo():
-    '''
-    Excentric spiral.  Both radius and x-center increase linearly with polar angle.
-    '''
-    fig = plt.figure(figsize=(12,8))
-    ax  = fig.add_subplot(1, 1, 1)
-    a, d, ex = 0.5, 2.5, 0.8
-    n = 50
-    tmax = 2*np.pi*n
-    tt = np.linspace(0, tmax, n*100, endpoint=True)
-    rr = a + d*tt/(2*np.pi*n)
-    xx = d*ex*tt/tmax + rr*np.cos(tt)
-    yy = rr*np.sin(tt)
-    ax.plot(xx, yy, color='green', lw=0.5)
-    ax.set_aspect('equal')
 
 @dataclass
 class Spirals:
@@ -75,6 +39,19 @@ class Spirals:
     def x2(self, i):      return self.xc1 + self.ex2*i*self.dr2() + self.dx
     def r1(self, i: int): return self.a1 + i*self.dr1()           # radius of ith circle
     def r2(self, i: int): return self.a2 + i*self.dr2()
+    def set(self, rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2):
+        self.rho_max = float(rho_max)
+        self.xc1 = float(xc1)
+        self.dx  = float(dx)
+        self.z1  = float(z1)
+        self.z2  = float(z2)
+        self.a1  = float(a1)
+        self.a2  = float(a2)
+        self.d1  = float(d1)
+        self.d2  = float(d2)
+        self.Ir  = float(Ir)
+        self.ex1 = float(ex1)
+        self.ex2 = float(ex2)
     def randomize(self, seed, bounds):
         random.seed(seed)
         self.xc1 = random.uniform(bounds.xc1[0], bounds.xc1[1])
@@ -162,6 +139,16 @@ def compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz):
     evec = (C + D, 2*Bxz) # the other one is (C - D, 2*Bxz)
     return evec
 
+def grads_B(Bxx, Bxz, Bzx, Bzz):
+    # instead of compute_jac_eigenvector:
+    assert np.abs(Bxz - Bzx) <= 1e-6*(np.abs(Bxz) + np.abs(Bzx))
+    C = Bzz - Bxx
+    D = np.sqrt(C*C + 4*Bxz*Bzx)
+    vx1, vx2, vz = C + D, C - D, 2*Bxz
+    grad1 = (vx1**2 + 2*vx1*vz*Bxz + vz**2*Bzz)/(vx1**2 + vz**2)
+    grad2 = (vx2**2 + 2*vx2*vz*Bxz + vz**2*Bzz)/(vx2**2 + vz**2)
+    return grad1[0], grad2[0]
+
 def get_angle(evec): # in [-pi, pi]
     angle = np.atan2(evec[0], evec[1]) # in [-pi, pi]
     if angle < 0:
@@ -170,6 +157,110 @@ def get_angle(evec): # in [-pi, pi]
         angle -= np.pi/2
     return angle
 
+def search_params(null_p, vars, pp):
+    # pp is default/initial params
+    bb = SpiralBounds()
+    null_x, null_y, null_z = null_p
+    angle = None
+    grads = None
+    def angle_utility(evec):
+        nonlocal angle
+        angle = get_angle(evec)
+        deg = angle*180/np.pi # in [0, 90]
+        return ((deg - 36)*(deg - 56)/8100)**2
+    def utility(values):
+        for var, value in zip(vars, values):
+            setattr(pp, var, value) # set pp.<var> = value
+        B = total_B(null_x, null_y, null_z, pp)
+        field_utility = np.sum(np.square(B))
+        Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
+        evec = compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz)
+        grads = grads_B(Bxx, Bxz, Bzx, Bzz)
+        return field_utility + angle_utility(evec)
+    initial_values = [getattr(pp, var) for var in vars]
+    bounds         = [getattr(bb, var) for var in vars]
+    result = minimize(utility, initial_values, bounds=bounds)
+    return result, angle, grads
+
+def write_result(fname, idx, seed, vars, result, angle, grads):
+    pp = Spirals()
+    ff = [field.name for field in fields(pp)]
+    if not os.path.isfile(fname):
+        fp = open(fname, 'w')
+        ff_csv = ','.join(ff)
+        print(f'idx,seed,dim,vars,{ff_csv},n1,n2,U,angle,grad1,grad2', file=fp)
+    else:
+        fp = open(fname, 'a')
+    for var, value in zip(vars, result.x):
+        setattr(pp, var, value)
+    values = [str(getattr(pp, var)) for var in ff]
+    print(f'{idx},{seed},{len(vars)},{" ".join(vars)},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]},{grads[0]},{grads[1]}', file=fp)
+    fp.close()
+
+def optimize_over_spiral_combinations(null_p, play_vars, dim, key, beg_seed, nrand):
+    vars_tuples = list(combinations(play_vars, dim))
+    for idx, vars in enumerate(vars_tuples):
+        pp = Spirals()
+        for rand in range(nrand):
+            seed = beg_seed + rand
+            pp.randomize(seed, SpiralBounds())
+            print(f'{idx}:{seed} starting with {pp}')
+            result, angle, grads = search_params(null_p, vars, pp)
+            fname = f'{key}.multiloop.{os.getpid()}.csv'
+            write_result(fname, idx, seed, vars, result, angle*180/np.pi, grads)
+
+def run_seed(seed, null_p, play_vars, dim, key):
+    optimize_over_spiral_combinations(null_p, play_vars, dim, key, seed, nrand=1000)
+                
+def do_runs(noun, null_p, play_vars, dim, key):
+    if noun == 'multi':
+        seeds = [1000*i for i in range(8)]
+        for seed in seeds:
+            print(f'{sys.argv[0]} run {seed}')
+    else:
+        run_seed(int(noun), null_p, play_vars, dim, key)
+
+'''
+plotting
+'''
+def spiral_demo():
+    '''
+    A spiral is modeled by a family of concentric circles.  This
+    looks okay, because the mean radial current due to the converging
+    spiral is compensated by the outgoing straight wire in the opposite
+    direction.
+    '''
+    fig = plt.figure(figsize=(12,8))
+    ax  = fig.add_subplot(1, 1, 1)
+    for i in range(10):
+        ax.add_patch(Circle((-1.5, 0), 0.5+0.1*i, lw=1, alpha=0.7,
+                            facecolor='none', edgecolor='blue'))
+    tt = np.linspace(0, 20*np.pi, 1000, endpoint=False)
+    rr = 0.5 + 1.0*tt/(20*np.pi)
+    xx = 1.5 + rr*np.cos(tt)
+    yy = 0.0 + rr*np.sin(tt)
+    ax.plot(xx, yy, color='red', lw=1)
+    ax.add_artist(lines.Line2D([xx[0], xx[-1]+0.1], [yy[0], 0], linewidth=1, color='red'))
+    ax.add_artist(lines.Line2D([xx[-1], xx[-1]+0.1], [yy[-1], yy[-1]], linewidth=1, color='red'))
+    ax.set_aspect('equal')
+    #plt.show()
+    plt.savefig('tmp.pdf')
+
+def ex_spiral_demo():
+    '''
+    Excentric spiral.  Both radius and x-center increase linearly with polar angle.
+    '''
+    fig = plt.figure(figsize=(12,8))
+    ax  = fig.add_subplot(1, 1, 1)
+    a, d, ex = 0.5, 2.5, 0.8
+    n = 50
+    tmax = 2*np.pi*n
+    tt = np.linspace(0, tmax, n*100, endpoint=True)
+    rr = a + d*tt/(2*np.pi*n)
+    xx = d*ex*tt/tmax + rr*np.cos(tt)
+    yy = rr*np.sin(tt)
+    ax.plot(xx, yy, color='green', lw=0.5)
+    ax.set_aspect('equal')
 
 '''
 Display (better) results of optimization.
@@ -184,7 +275,8 @@ def mark_spiral(ax, x, z, a, d, ex, n, color):
         ax.add_patch(Circle((xi + ri, z), 0.01, color=color, alpha=0.7))
     ax.add_artist(lines.Line2D([xi - ri, xi + ri], [z, z], linewidth=1, color=color))
 
-def mark_x(ax, evec):
+def mark_x(ax, evec, null_p):
+    null_x, null_y, null_z = null_p
     if 0: # small marker
         ax.scatter(null_x, null_z, s=50, color='brown', marker='X')
     R = 0.5 # wheel radius
@@ -201,122 +293,78 @@ def mark_x(ax, evec):
         theta -= np.pi/2
     return theta*180/np.pi
 
-def plot_spirals(pp, title):
-    fig = plt.figure(figsize=(12,8))
-    ax  = fig.add_subplot(1, 1, 1)
+def plot_spirals(ax, pp):
     for i in range(pp.n1()): ax.add_patch(Circle((pp.x1(i), 0), pp.r1(i), facecolor='none', edgecolor='blue', alpha=0.7))
     for i in range(pp.n2()): ax.add_patch(Circle((pp.x2(i), 0), pp.r2(i), facecolor='none', edgecolor='green', alpha=0.7))
-    ax.set_xlim(-4, 4)
-    ax.set_ylim(-4, 4)
-    ax.set_aspect('equal')
-    ax.set_title(title)
 
-def plot_field(spirals, null_x, null_z, title):
+def plot_field(ax, pp, null_p, title):
     focus_on_x = False # draw only in the vicinity of the X-point
     if focus_on_x:
         xmin, xmax = -1, 1
-        zmin, zmax =  0.5, 2.5
+        zmin, zmax =  0, 1.5
     else:
-        xmin, xmax = -4, 4
-        zmin, zmax =  0.1, 3
+        xmin, xmax = -5, 5
+        zmin, zmax = 0, 5
     xx, zz = np.linspace(xmin, xmax, 150), np.linspace(zmin, zmax, 150)
     xx_grid, zz_grid = np.meshgrid(xx, zz)
     B = total_B(xx_grid, 0, zz_grid, pp)
     # print(B)
-    fig = plt.figure(figsize=(12,8))
-    ax  = fig.add_subplot(1, 1, 1)
     if 1:
         mark_spiral(ax, pp.xc1,         pp.z1, pp.a1, pp.d1, pp.ex1, pp.n1(), 'blue')
         mark_spiral(ax, pp.xc1 + pp.dx, pp.z2, pp.a2, pp.d2, pp.ex2, pp.n2(), 'red')
+        null_x, null_y, null_z = null_p
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         evec = compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz)
-        deg = mark_x(ax, evec)
+        deg = mark_x(ax, evec, null_p)
+        grads = grads_B(Bxx, Bxz, Bzx, Bzz)
     ax.streamplot(xx_grid, zz_grid, B[0], B[2], density=2, color='g',
                     linewidth=0.5, cmap=plt.cm.viridis, arrowsize=0.8)
     ax.set_aspect('equal')
-    ax.set_title(f'{title}: {round(deg, 2)} deg')
-    plt.show()
+    ax.set_title(f'{title}: ang={round(deg, 2)} grads={round(grads[0],2)},{round(grads[1],2)}', fontsize=6)
 
-def plot_result(idx, seed, vars, result):
-    pp = Spirals()
-    for var, value in zip(vv, result.x):
-        setattr(pp, var, value) # set pp.<var> = to best values saved in result.x
-    print(f'Run {idx}:{seed}: vars={vv} {result}')
+def plot_field_and_spirals(pdf, idx, seed, pp, null_p):
+    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(8, 12))
+    ax1.set_ylim(-1, 5)
+    ax2.set_ylim(-5, 5)
+    for ax in (ax1, ax2):
+        ax.set_xlim(-5, 5)
+        ax.set_aspect('equal')
+    plt.tight_layout()
+    ax1.hlines(y=0, xmin=-5, xmax=5, colors='black', linestyles='--', lw=1)
     title = f'Run {idx}:{seed}: {pp}'
-    plot_field(pp, null_x, null_z, title)
-    plot_spirals(pp, f'Spirals for Run {idx:02d}')
+    plot_field(ax1, pp, null_p, title)
+    plot_spirals(ax2, pp)
+    print(f'# {{{pdf}}}')
+    plt.savefig(pdf)
 
-def plot_best_results(vars, results):
-    for idx, (vv, result) in enumerate(zip(vars, results)):
-        if result.fun > 1e-6:
-            continue
-        plot_result(idx, -1, vv, result)
-
-def search_params(null_x, null_y, null_z, vars, pp):
-    # pp is default/initial params
-    bb = SpiralBounds()
-    angle = None
-    def angle_utility(evec):
-        nonlocal angle
-        angle = get_angle(evec)
-        deg = angle*180/np.pi # in [0, 90]
-        return ((deg - 36)*(deg - 56)/8100)**2
-    def utility(values):
-        for var, value in zip(vars, values):
-            setattr(pp, var, value) # set pp.<var> = value
-        B = total_B(null_x, null_y, null_z, pp)
-        field_utility = np.sum(np.square(B))
-        Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
-        evec = compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz)
-        return field_utility + angle_utility(evec)
-    initial_values = [getattr(pp, var) for var in vars]
-    bounds         = [getattr(bb, var) for var in vars]
-    result = minimize(utility, initial_values, bounds=bounds)
-    return result, angle
-
-def write_result(fname, idx, seed, vars, result, angle):
-    pp = Spirals()
-    ff = [field.name for field in fields(pp)]
-    if not os.path.isfile(fname):
-        fp = open(fname, 'w')
-        print(f'idx,seed,dim,vars,{",".join(ff)},n1,n2,U,angle', file=fp)
-    else:
-        fp = open(fname, 'a')
-    for var, value in zip(vars, result.x):
-        setattr(pp, var, value)
-    values = [str(getattr(pp, var)) for var in ff]
-    print(f'{idx},{seed},{len(vars)},{" ".join(vars)},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]}', file=fp)
-    fp.close()
-
-def optimize_over_spiral_combinations(null_x, null_y, null_z, play_vars, dim, key, nrand=0):
-    vars_tuples = list(combinations(play_vars, dim))
-    out_vars = []
-    out_results = [] # for each vars_tuple
-    for idx, vars in enumerate(vars_tuples):
-        pp = Spirals()
-        for seed in range(nrand + 1):
-            if seed > 0:
-                pp.randomize(seed, SpiralBounds())
-            print(f'{idx}:{seed} starting with {pp}')
-            result, angle = search_params(null_x, null_y, null_z, vars, pp)
-            out_vars.append(vars)
-            out_results.append(result)
-            print(f'Run {idx:02d}:{seed}:  ({" ".join(vars)}) = ({" ".join([str(x) for x in result.x])}): U = {result.fun}')
-            if key is not None:
-                fname = f'{key}.multiloop.csv'
-                write_result(fname, idx, seed, vars, result, angle*180/np.pi)
-
-if __name__ == '__main__':
+def do_plots(noun, null_p):
     if 0: spiral_demo()
     if 0: ex_spiral_demo()
-    if 0: # introspection of fields in dataclass
-        for field in fields(Spirals()):
-            print(field.name)
-
-    null_x, null_y, null_z = np.array([0.0]), np.array([0.0]), np.array([0.98])
-
-    #play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir']
-    play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'Ir'] # no excentricities
-    dim = len(play_vars) # how many parameters (out ot 9) to play with at a time.  9 choose 5 is 126.
-    key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
-    optimize_over_spiral_combinations(null_x, null_y, null_z, play_vars, dim, key, nrand=10)
+    fname = noun
+    with open(fname) as file:
+        for line in file:
+            if line.startswith('idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle'):
+                continue
+            idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle = line.rstrip().split(',')
+            if float(U) > 1e-6:
+                continue
+            pp = Spirals()
+            pp.set(rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2)
+            pdf = fname.replace('.csv', '')
+            pdf = f'{pdf}.{idx}.{seed}.pdf'
+            plot_field_and_spirals(pdf, idx, seed, pp, null_p)
+                
+if __name__ == '__main__':
+    null_p = np.array([0.0]), np.array([0.0]), np.array([0.98])
+    assert len(sys.argv) == 3
+    verb, noun = sys.argv[1], sys.argv[2]
+    if verb == 'plot':
+        do_plots(noun, null_p)
+    elif verb == 'run':
+        play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir']
+        # play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'Ir'] # no ex
+        dim = len(play_vars) # how many parameters (out ot 9) to play with at a time
+        key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
+        do_runs(noun, null_p, play_vars, dim, key)
+    else:
+        assert False
