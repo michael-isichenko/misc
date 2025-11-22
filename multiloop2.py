@@ -347,7 +347,7 @@ def do_plots(noun, null_p):
         for line in file:
             if line.startswith('idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle'):
                 continue
-            idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle = line.rstrip().split(',')
+            idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle,grad1,grad2 = line.rstrip().split(',')
             if float(U) > 1e-6:
                 continue
             pp = Spirals()
@@ -355,10 +355,23 @@ def do_plots(noun, null_p):
             pdf = fname.replace('.csv', '')
             pdf = f'{pdf}.{idx}.{seed}.pdf'
             plot_field_and_spirals(pdf, idx, seed, pp, null_p)
+
+def do_join(fnames):
+    header = False
+    for fname in fnames:
+        with open(fname) as file:
+            for line in file:
+                if line.startswith('idx'):
+                    if not header:
+                        print(line.rstrip())
+                        header = True
+                    else:
+                        continue
+                print(line.rstrip())
                 
 if __name__ == '__main__':
     null_p = np.array([0.0]), np.array([0.0]), np.array([0.98])
-    assert len(sys.argv) == 3
+    assert len(sys.argv) >= 3
     verb, noun = sys.argv[1], sys.argv[2]
     if verb == 'plot':
         do_plots(noun, null_p)
@@ -368,5 +381,8 @@ if __name__ == '__main__':
         dim = len(play_vars) # how many parameters (out ot 9) to play with at a time
         key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
         do_runs(noun, null_p, play_vars, dim, key)
+    elif verb == 'join':
+        assert len(sys.argv) > 3
+        do_join(sys.argv[2:])
     else:
         assert False
