@@ -139,6 +139,16 @@ def compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz):
     evec = (C + D, 2*Bxz) # the other one is (C - D, 2*Bxz)
     return evec
 
+def grads_B(Bxx, Bxz, Bzx, Bzz):
+    # instead of compute_jac_eigenvector:
+    assert np.abs(Bxz - Bzx) <= 1e-6*(np.abs(Bxz) + np.abs(Bzx))
+    C = Bzz - Bxx
+    D = np.sqrt(C*C + 4*Bxz*Bzx)
+    vx1, vx2, vz = C + D, C - D, 2*Bxz
+    grad1 = (vx1**2 + 2*vx1*vz*Bxz + vz**2*Bzz)/(vx1**2 + vz**2)
+    grad2 = (vx2**2 + 2*vx2*vz*Bxz + vz**2*Bzz)/(vx2**2 + vz**2)
+    return grad1[0], grad2[0]
+
 def get_angle(evec): # in [-pi, pi]
     angle = np.atan2(evec[0], evec[1]) # in [-pi, pi]
     if angle < 0:
@@ -147,12 +157,12 @@ def get_angle(evec): # in [-pi, pi]
         angle -= np.pi/2
     return angle
 
-
 def search_params(null_p, vars, pp):
     # pp is default/initial params
     bb = SpiralBounds()
     null_x, null_y, null_z = null_p
     angle = None
+    grads = None
     def angle_utility(evec):
         nonlocal angle
         angle = get_angle(evec)
@@ -165,25 +175,26 @@ def search_params(null_p, vars, pp):
         field_utility = np.sum(np.square(B))
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         evec = compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz)
+        grads = grads_B(Bxx, Bxz, Bzx, Bzz)
         return field_utility + angle_utility(evec)
     initial_values = [getattr(pp, var) for var in vars]
     bounds         = [getattr(bb, var) for var in vars]
     result = minimize(utility, initial_values, bounds=bounds)
-    return result, angle
+    return result, angle, grads
 
-def write_result(fname, idx, seed, vars, result, angle):
+def write_result(fname, idx, seed, vars, result, angle, grads):
     pp = Spirals()
     ff = [field.name for field in fields(pp)]
     if not os.path.isfile(fname):
         fp = open(fname, 'w')
         ff_csv = ','.join(ff)
-        print(f'idx,seed,dim,vars,{ff_csv},n1,n2,U,angle', file=fp)
+        print(f'idx,seed,dim,vars,{ff_csv},n1,n2,U,angle,grad1,grad2', file=fp)
     else:
         fp = open(fname, 'a')
     for var, value in zip(vars, result.x):
         setattr(pp, var, value)
     values = [str(getattr(pp, var)) for var in ff]
-    print(f'{idx},{seed},{len(vars)},{" ".join(vars)},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]}', file=fp)
+    print(f'{idx},{seed},{len(vars)},{" ".join(vars)},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]},{grads[0]},{grads[1]}', file=fp)
     fp.close()
 
 def optimize_over_spiral_combinations(null_p, play_vars, dim, key, beg_seed, nrand):
@@ -194,16 +205,17 @@ def optimize_over_spiral_combinations(null_p, play_vars, dim, key, beg_seed, nra
             seed = beg_seed + rand
             pp.randomize(seed, SpiralBounds())
             print(f'{idx}:{seed} starting with {pp}')
-            result, angle = search_params(null_p, vars, pp)
+            result, angle, grads = search_params(null_p, vars, pp)
             fname = f'{key}.multiloop.{os.getpid()}.csv'
-            write_result(fname, idx, seed, vars, result, angle*180/np.pi)
+            write_result(fname, idx, seed, vars, result, angle*180/np.pi, grads)
 
 def run_seed(seed, null_p, play_vars, dim, key):
-    optimize_over_spiral_combinations(null_p, play_vars, dim, key, seed, nrand=100)
+    optimize_over_spiral_combinations(null_p, play_vars, dim, key, seed, nrand=1000)
                 
 def do_runs(noun, null_p, play_vars, dim, key):
     if noun == 'multi':
-        for seed in [100, 200, 300, 400, 500, 600, 700, 800]:
+        seeds = [1000*i for i in range(8)]
+        for seed in seeds:
             print(f'{sys.argv[0]} run {seed}')
     else:
         run_seed(int(noun), null_p, play_vars, dim, key)
@@ -304,10 +316,11 @@ def plot_field(ax, pp, null_p, title):
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         evec = compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz)
         deg = mark_x(ax, evec, null_p)
+        grads = grads_B(Bxx, Bxz, Bzx, Bzz)
     ax.streamplot(xx_grid, zz_grid, B[0], B[2], density=2, color='g',
                     linewidth=0.5, cmap=plt.cm.viridis, arrowsize=0.8)
     ax.set_aspect('equal')
-    ax.set_title(f'{title}: {round(deg, 2)} deg', fontsize=8)
+    ax.set_title(f'{title}: ang={round(deg, 2)} grads={round(grads[0],2)},{round(grads[1],2)}', fontsize=6)
 
 def plot_field_and_spirals(pdf, idx, seed, pp, null_p):
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(8, 12))
@@ -348,8 +361,8 @@ if __name__ == '__main__':
     if verb == 'plot':
         do_plots(noun, null_p)
     elif verb == 'run':
-        #play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir']
-        play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'Ir'] # no ex
+        play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir']
+        # play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'Ir'] # no ex
         dim = len(play_vars) # how many parameters (out ot 9) to play with at a time
         key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
         do_runs(noun, null_p, play_vars, dim, key)
