@@ -169,6 +169,7 @@ def search_params(null_p, vars, pp):
         deg = angle*180/np.pi # in [0, 90]
         return ((deg - 36)*(deg - 56)/8100)**2
     def utility(values):
+        nonlocal grads
         for var, value in zip(vars, values):
             setattr(pp, var, value) # set pp.<var> = value
         B = total_B(null_x, null_y, null_z, pp)
@@ -183,6 +184,7 @@ def search_params(null_p, vars, pp):
     return result, angle, grads
 
 def write_result(fname, idx, seed, vars, result, angle, grads):
+    # print(f'XXX {grads}')
     pp = Spirals()
     ff = [field.name for field in fields(pp)]
     if not os.path.isfile(fname):
