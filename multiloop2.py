@@ -157,6 +157,22 @@ def get_angle(evec): # in [-pi, pi]
         angle -= np.pi/2
     return angle
 
+def get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz):
+    C = Bzz - Bxx
+    D = np.sqrt(C*C + 4*Bxz*Bzx)
+    vx1, vx2, vz = C + D, C - D, 2*Bxz
+    slope1 = np.abs(vz)/(np.abs(vx1) + 1e-10)
+    slope2 = np.abs(vz)/(np.abs(vx2) + 1e-10)
+    if slope1 < slope2:
+        angle = np.atan2(vx1, vz)
+        slope = slope1
+        grad = (vx1**2 + 2*vx1*vz*Bxz + vz**2*Bzz)/(vx1**2 + vz**2)
+    else:
+        angle = np.atan2(vx2, vz)
+        slope = slope2
+        grad = (vx2**2 + 2*vx2*vz*Bxz + vz**2*Bzz)/(vx2**2 + vz**2)
+    return slope, np.abs(grad)
+
 def search_params(null_p, vars, pp):
     # pp is default/initial params
     bb = SpiralBounds()
@@ -183,6 +199,27 @@ def search_params(null_p, vars, pp):
     result = minimize(utility, initial_values, bounds=bounds)
     return result, angle, grads
 
+def search_params_with_grad(null_p, vars, pp, tau, gamma):
+    T = np.tan(36.0*np.pi/180)
+    # pp is default/initial params
+    bb = SpiralBounds()
+    null_x, null_y, null_z = null_p
+    angle = None
+    grad = None
+    def utility(values):
+        nonlocal angle
+        nonlocal grad
+        for var, value in zip(vars, values):
+            setattr(pp, var, value) # set pp.<var> = value
+        B = total_B(null_x, null_y, null_z, pp)
+        Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
+        angle, slope, grad = get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz)
+        return np.sum(np.square(B)) + tau*(slope - T)**2 - gamma*grad**2
+    initial_values = [getattr(pp, var) for var in vars]
+    bounds         = [getattr(bb, var) for var in vars]
+    result = minimize(utility, initial_values, bounds=bounds)
+    return result, angle, grad
+
 def write_result(fname, idx, seed, vars, result, angle, grads):
     # print(f'XXX {grads}')
     pp = Spirals()
@@ -199,6 +236,22 @@ def write_result(fname, idx, seed, vars, result, angle, grads):
     print(f'{idx},{seed},{len(vars)},{" ".join(vars)},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]},{grads[0]},{grads[1]}', file=fp)
     fp.close()
 
+def write_result2(fname, idx, seed, vars, result, angle, grad, tau, gamma):
+    # print(f'XXX {grads}')
+    pp = Spirals()
+    ff = [field.name for field in fields(pp)]
+    if not os.path.isfile(fname):
+        fp = open(fname, 'w')
+        ff_csv = ','.join(ff)
+        print(f'idx,seed,tau,gamma,{ff_csv},n1,n2,U,angle,grad', file=fp)
+    else:
+        fp = open(fname, 'a')
+    for var, value in zip(vars, result.x):
+        setattr(pp, var, value)
+    values = [str(getattr(pp, var)) for var in ff]
+    print(f'{idx},{seed},{tau},{gamma},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]},{grads[0]},{grads[1]}', file=fp)
+    fp.close()
+
 def optimize_over_spiral_combinations(null_p, play_vars, dim, key, beg_seed, nrand):
     vars_tuples = list(combinations(play_vars, dim))
     for idx, vars in enumerate(vars_tuples):
@@ -211,8 +264,22 @@ def optimize_over_spiral_combinations(null_p, play_vars, dim, key, beg_seed, nra
             fname = f'{key}.multiloop.{os.getpid()}.csv'
             write_result(fname, idx, seed, vars, result, angle*180/np.pi, grads)
 
+def optimize_over_spirals(null_p, key, beg_seed, nrand):
+    vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir'] # search space
+    pp = Spirals()
+    tau = 50
+    gamma = 0.001
+    for rand in range(nrand):
+        seed = beg_seed + rand
+        pp.randomize(seed, SpiralBounds())
+        print(f'{idx}:{seed} starting with {pp}')
+        result, angle, grad = search_params_with_grad(null_p, vars, pp, tau, gamma)
+        fname = f'{key}.spirals.{os.getpid()}.csv'
+        write_result2(fname, idx, seed, vars, result, angle*180/np.pi, grad, tau, gamma)
+
 def run_seed(seed, null_p, play_vars, dim, key):
-    optimize_over_spiral_combinations(null_p, play_vars, dim, key, seed, nrand=1000)
+    # optimize_over_spiral_combinations(null_p, play_vars, dim, key, seed, nrand=1000)
+    optimize_over_spirals(null_p, key, seed, nrand=100)
                 
 def do_runs(noun, null_p, play_vars, dim, key):
     if noun == 'multi':
