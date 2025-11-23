@@ -1,5 +1,6 @@
 \documentclass[10pt]{article}
 \usepackage{amsmath} % aligned
+\usepackage{tikz}
 \usepackage{geometry}
 \geometry{margin=1in}
 \newcommand{\bfL}{{\bf L}}
@@ -119,11 +120,26 @@ lines are the eigenvectors of the feld's Jacobian matrix:
 \begin{equation}
 J=\left(\begin{array}{ll} B_{x,x} & B_{x,z}\\ B_{z,x} & B_{z,z}\end{array}\right),\quad J\bfv=\lambda\bfv,\quad
 \bfv_{1,2}=\left(C\pm\sqrt{C^2+4B_{x,z}B_{z,x}}, 2B_{x,z}\right).
+\label{v12}
 \end{equation}
-Note that the two eignevectors are orthogonal: $\bfv_1\cdot\bfv_2=0$
-due to the curl-free field, $B_{x,z}=B_{z,x}$, as expected.  The
-expression for the eigenvectors in {\tt mark\_x()} is used for a visual
-check of the $X$ point separatrix relative to magnetic field lines.
+Note that the two eignevectors in (\ref{v12}) are orthogonal:
+$\bfv_1\cdot\bfv_2=0$ due to the curl-free field, $B_{x,z}=B_{z,x}$,
+as expected.  The expression for the eigenvectors in {\tt mark\_x()}
+is used for a visual check of the $X$ point separatrix relative to
+magnetic field lines.  If the $x$ axis is directed right and $z$ up,
+then $v_{1x}>0$.  The orientation of the the vectors is as in the picture.
+\begin{tikzpicture}
+  \draw[->] (-2,0) -- (2,0) node[right] {$x$} node[above] at (1,1) {$B_{x,z}>0$};
+  \draw[->] (0,-2) -- (0,2) node[above] {$z$};
+  \draw[->, thick, blue] (0,0) -- (2,1) node[right] {$\bfv_1$}; % Vector from origin to (2,1)
+  \draw[->, thick, blue] (0,0) -- (-1,2) node[right] {$\bfv_2$};
+\end{tikzpicture}%
+\begin{tikzpicture}
+  \draw[->] (-2,0) -- (2,0) node[right] {$x$} node[above] at (1,1) {$B_{x,z}<0$};
+  \draw[->] (0,-2) -- (0,2) node[above] {$z$}; % Y-axis
+  \draw[->, thick, blue] (0,0) -- (-1,2) node[right] {$\bfv_1$};
+  \draw[->, thick, blue] (0,0) -- (-2,-1) node[left] {$\bfv_2$};
+\end{tikzpicture}
 
 \section{Gradient}
 
@@ -141,7 +157,28 @@ Using the linear expansion of the components of $\bfB$ in
 
 \section{Optimization of magnetic field}
 
-We are concerned with a 2D magnetic geometry in the $(x,z)$ plane.
+We are concerned with 2D magnetic geometry in the $(x,z)$ plane.  If
+the null point is to be located at $(x_0, z_0)$ at an angle
+$\theta_0$, the current loop configuration can be found iteratively by
+minimizing the utilty
+\begin{equation}
+  U=|\bfB(x_0,0,z_0)|^2 + (\theta-\theta_0)^2(\theta-\theta_1)^2.
+\end{equation}
+This is assuming the field and the angles are numerically of the same
+order of magnitude.
+
+Since the beam can be shot in either first or second quadrant, both
+$\theta_0=36^\circ$ and $\theta_1=54^\circ$ would work.  It looks
+useful to express the angle penalty in terms of the separatrix vectors
+$\bfv$.  If $t=\tan(\theta_0)$, for either vector $\bvf$ we need to have
+\begin{equation}
+  |v_z/v_x| = t\quad\text{or}\quad1/t.
+\end{equation}
+This can be written as
+\begin{equation}
+  \log(|v_z/v_x|) - \log(|t|) = 0.
+\end{equation}
+
 
 
 
