@@ -219,6 +219,54 @@ Adding a small $\gamma$ factor will drive $U$ negative and introduce a
 trade-off between exact geometry and good gradient.  The optimal value
 of $\gamma$ is not {\em a priori} known and needs to be experimented with.
 
+As an option, the first two (geometry) terms in (\ref{U3}) can use
+absolute values instead of squares.  That would make a stronger
+stimiulus to have the right null point at a right angle.
 
+\section{Geometry constraints}
+
+$i$th circle in a ``spiral'' has the $x$ position and center and the
+radius
+\begin{equation}
+  x_i = x_0 + i\,\delta x,\quad r_i=r_0 + i\,\delta r,\quad i<n,
+\end{equation}
+where $\delta x$ is ``excentricity,'' or center displacement per
+``revolution,'' and $\delta r>0$ is the radius increment.  To avoid
+self-intersection of the circles, we must obviously have $|\delta
+x|<\delta r$.  The coil densities on the two sides are $(\delta r \pm
+\delta x)^{-1}$.  The max coil density $\rho_{max}=25\,cm^{-1}$ should
+be realized on one side, meaning that the radius increment is either
+fixed for concentric circles or uniquely determined by the
+excentricity:
+\begin{equation}
+  \delta r = \rho_{max}^{-1} + |\delta x|
+\end{equation}
+The outermost circle extends to
+\begin{equation}
+  x_{\pm} = x_{n-1} \pm r_{n-1}.
+  \label{xpm}
+\end{equation}
+To maximize the field, and possibly its gradient, we can require the
+maximum number of coils $n$ such as one of the limits (\ref{xpm})
+reaches the board boundaries $\pm X$ where $X=5\,cm$.  At least such a
+requirement would allow to minimize $X$.  So we want the first of the
+following two equations to hold as $n$ is increased:
+\begin{equation}
+  x_0 + (n - 1)\delta x \pm [r_0 + (n - 1)(\rho_{max}^{-1} + |\delta x|)] = \pm X.
+\end{equation}
+This gives
+\begin{equation}
+  \begin{aligned}
+    n - 1
+    &=  \min\left(\frac{\pm (X - r_0) - x_0}{\delta x \pm (\rho_{max}^{-1} + |\delta x|)}\right)\\
+    &= \min\left(
+    \frac{X-r_0-x_0}{\rho_{max}^{-1}+2\delta x^+},
+    \frac{-X+r_0-x_0}{-\rho_{max}^{-1}+2\delta x^-}\right)\\
+    &= \min\left(
+    \frac{X-r_0-x_0}{\rho_{max}^{-1}+2\delta x^+},
+    \frac{X-r_0+x_0}{\rho_{max}^{-1}-2\delta x^-}\right).
+  \end{aligned}
+\end{equation}
+  
 
 \end{document}

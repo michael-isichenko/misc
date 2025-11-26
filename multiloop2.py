@@ -17,10 +17,16 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import matplotlib.lines as lines
 
+'''
+To say within [-R,R]^2:
+
+
+'''
+
 @dataclass
 class Spirals:
     rho_max: float = 25
-    xc1: float = -0.5     # center of inner circle
+    xc1: float = -0.5   # center of inner circle
     dx: float =  1.0    # xc2 - xc1
     z1: float = -0.25   # z-height of the spiral
     z2: float = -0.35
@@ -31,14 +37,18 @@ class Spirals:
     Ir: float = -1.0    # I2/I1
     ex1: float = 0      # excentricity, must be less than 1 by abs value
     ex2: float = 0 
-    def n1(self):  return int(np.round(self.rho_max*self.d1*(1-np.abs(self.ex1)))) # number of revolutions (circles)
-    def n2(self):  return int(np.round(self.rho_max*self.d2*(1-np.abs(self.ex2))))
-    def dr1(self): return 1/(self.rho_max*(1-np.abs(self.ex1))) # radius increment per revolution
-    def dr2(self): return 1/(self.rho_max*(1-np.abs(self.ex2)))
-    def x1(self, i):      return self.xc1 + self.ex1*i*self.dr1() # center of ith circle
-    def x2(self, i):      return self.xc1 + self.ex2*i*self.dr2() + self.dx
-    def r1(self, i: int): return self.a1 + i*self.dr1()           # radius of ith circle
-    def r2(self, i: int): return self.a2 + i*self.dr2()
+    def n1(self):    return int(np.round(self.rho_max*self.d1*(1-np.abs(self.ex1)))) # number of revolutions (circles)
+    def n2(self):    return int(np.round(self.rho_max*self.d2*(1-np.abs(self.ex2))))
+    def dr1(self):   return 1/(self.rho_max*(1-np.abs(self.ex1))) # radius increment per revolution
+    def dr2(self):   return 1/(self.rho_max*(1-np.abs(self.ex2)))
+    def x1(self, i): return self.xc1 + self.ex1*i*self.dr1() # center of ith circle
+    def x2(self, i): return self.xc1 + self.ex2*i*self.dr2() + self.dx
+    def r1(self, i): return self.a1 + i*self.dr1()           # radius of ith circle
+    def r2(self, i): return self.a2 + i*self.dr2()
+    def in_xrange(self):
+        n1, n2 = self.n1(), self.n2()
+        r1, r2 = self.r1(n1), self.r2(n2)
+        return min(self.x1(n1) - r1, self.x2(n2) - r2) > -4.9 and max(self.x1(n1) + r1, self.x2(n2) + r2) < 4.9
     def set(self, rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2):
         self.rho_max = float(rho_max)
         self.xc1 = float(xc1)
@@ -171,7 +181,7 @@ def get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz):
         angle = np.atan2(vx2, vz)
         slope = slope2
         grad = (vx2**2 + 2*vx2*vz*Bxz + vz**2*Bzz)/(vx2**2 + vz**2)
-    return slope, np.abs(grad)
+    return angle, slope, np.abs(grad)
 
 def search_params(null_p, vars, pp):
     # pp is default/initial params
@@ -206,7 +216,7 @@ def search_params_with_grad(null_p, vars, pp, tau, gamma):
     null_x, null_y, null_z = null_p
     angle = None
     grad = None
-    def utility(values):
+    def utility2(values):
         nonlocal angle
         nonlocal grad
         for var, value in zip(vars, values):
@@ -215,9 +225,10 @@ def search_params_with_grad(null_p, vars, pp, tau, gamma):
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         angle, slope, grad = get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz)
         return np.sum(np.square(B)) + tau*(slope - T)**2 - gamma*grad**2
+        # return np.sum(np.abs(B)) + tau*np.abs(slope - T) - gamma*grad**2
     initial_values = [getattr(pp, var) for var in vars]
     bounds         = [getattr(bb, var) for var in vars]
-    result = minimize(utility, initial_values, bounds=bounds)
+    result = minimize(utility2, initial_values, bounds=bounds)
     return result, angle, grad
 
 def write_result(fname, idx, seed, vars, result, angle, grads):
@@ -236,29 +247,33 @@ def write_result(fname, idx, seed, vars, result, angle, grads):
     print(f'{idx},{seed},{len(vars)},{" ".join(vars)},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]},{grads[0]},{grads[1]}', file=fp)
     fp.close()
 
-def write_result2(fname, idx, seed, vars, result, angle, grad, tau, gamma):
+def write_result2(fname, seed, vars, result, angle, grad, tau, gamma):
     # print(f'XXX {grads}')
     pp = Spirals()
     ff = [field.name for field in fields(pp)]
     if not os.path.isfile(fname):
         fp = open(fname, 'w')
         ff_csv = ','.join(ff)
-        print(f'idx,seed,tau,gamma,{ff_csv},n1,n2,U,angle,grad', file=fp)
+        print(f'seed,tau,gamma,{ff_csv},n1,n2,U,angle,grad', file=fp)
     else:
         fp = open(fname, 'a')
     for var, value in zip(vars, result.x):
         setattr(pp, var, value)
     values = [str(getattr(pp, var)) for var in ff]
-    print(f'{idx},{seed},{tau},{gamma},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]},{grads[0]},{grads[1]}', file=fp)
+    print(f'{seed},{tau},{gamma},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{angle[0]},{grad[0]}', file=fp)
     fp.close()
 
 def optimize_over_spiral_combinations(null_p, play_vars, dim, key, beg_seed, nrand):
     vars_tuples = list(combinations(play_vars, dim))
     for idx, vars in enumerate(vars_tuples):
         pp = Spirals()
+        seed = beg_seed - 1
         for rand in range(nrand):
-            seed = beg_seed + rand
-            pp.randomize(seed, SpiralBounds())
+            while True:
+                seed += 1
+                pp.randomize(seed, SpiralBounds())
+                if pp.in_xrange():
+                    break
             print(f'{idx}:{seed} starting with {pp}')
             result, angle, grads = search_params(null_p, vars, pp)
             fname = f'{key}.multiloop.{os.getpid()}.csv'
@@ -268,18 +283,22 @@ def optimize_over_spirals(null_p, key, beg_seed, nrand):
     vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir'] # search space
     pp = Spirals()
     tau = 50
-    gamma = 0.001
+    gamma = 1e-6
+    seed = beg_seed - 1
     for rand in range(nrand):
-        seed = beg_seed + rand
-        pp.randomize(seed, SpiralBounds())
-        print(f'{idx}:{seed} starting with {pp}')
+        while True:
+            seed += 1
+            pp.randomize(seed, SpiralBounds())
+            if pp.in_xrange():
+                break
+        print(f'seed={seed} starting with {pp}')
         result, angle, grad = search_params_with_grad(null_p, vars, pp, tau, gamma)
         fname = f'{key}.spirals.{os.getpid()}.csv'
-        write_result2(fname, idx, seed, vars, result, angle*180/np.pi, grad, tau, gamma)
+        write_result2(fname, seed, vars, result, angle*180/np.pi, grad, tau, gamma)
 
 def run_seed(seed, null_p, play_vars, dim, key):
     # optimize_over_spiral_combinations(null_p, play_vars, dim, key, seed, nrand=1000)
-    optimize_over_spirals(null_p, key, seed, nrand=100)
+    optimize_over_spirals(null_p, key, seed, nrand=200)
                 
 def do_runs(noun, null_p, play_vars, dim, key):
     if noun == 'multi':
@@ -362,9 +381,9 @@ def mark_x(ax, evec, null_p):
         theta -= np.pi/2
     return theta*180/np.pi
 
-def plot_spirals(ax, pp):
-    for i in range(pp.n1()): ax.add_patch(Circle((pp.x1(i), 0), pp.r1(i), facecolor='none', edgecolor='blue', alpha=0.7))
-    for i in range(pp.n2()): ax.add_patch(Circle((pp.x2(i), 0), pp.r2(i), facecolor='none', edgecolor='green', alpha=0.7))
+def plot_spirals(ax, pp, yoff=0):
+    for i in range(pp.n1()): ax.add_patch(Circle((pp.x1(i), yoff), pp.r1(i), facecolor='none', edgecolor='blue', alpha=0.7))
+    for i in range(pp.n2()): ax.add_patch(Circle((pp.x2(i), yoff), pp.r2(i), facecolor='none', edgecolor='green', alpha=0.7))
 
 def plot_field(ax, pp, null_p, title):
     focus_on_x = False # draw only in the vicinity of the X-point
@@ -391,37 +410,71 @@ def plot_field(ax, pp, null_p, title):
     ax.set_aspect('equal')
     ax.set_title(f'{title}: ang={round(deg, 2)} grads={round(grads[0],2)},{round(grads[1],2)}', fontsize=6)
 
-def plot_field_and_spirals(pdf, idx, seed, pp, null_p):
+def plot_field_and_spirals(pdf, tau, gamma, seed, pp, null_p):
+    yoffset = -5.5
+    fig, ax = plt.subplots(figsize=(8, 12))
+    ax.hlines(y=0, xmin=-5, xmax=5, colors='black', linestyles='--', lw=1)
+    ax.hlines(y=-0.5, xmin=-5, xmax=5, colors='black', linestyles='-', lw=1)
+    ax.hlines(y=yoffset, xmin=-5, xmax=5, colors='black', linestyles='--', lw=1)
+    ax.set_xlim(-5, 5)
+    ax.set_ylim(-10.5, 3)
+    ax.set_aspect('equal')
+    if tau is None:
+        title = f'seed={seed}: {pp}'
+    else:
+        title = f'tau={round(tau,3)} gamma={round(gamma,3)} seed={seed}: {pp}'
+    plot_field(ax, pp, null_p, title)
+    plot_spirals(ax, pp, yoffset)
+    print(f'# {{{pdf}}}')
+    plt.savefig(pdf)
+    return
+    
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(8, 12))
-    ax1.set_ylim(-1, 5)
-    ax2.set_ylim(-5, 5)
-    for ax in (ax1, ax2):
-        ax.set_xlim(-5, 5)
-        ax.set_aspect('equal')
-    plt.tight_layout()
     ax1.hlines(y=0, xmin=-5, xmax=5, colors='black', linestyles='--', lw=1)
-    title = f'Run {idx}:{seed}: {pp}'
+    if tau is None:
+        title = f'seed={seed}: {pp}'
+    else:
+        title = f'tau={round(tau,3)} gamma={round(gamma,3)} seed={seed}: {pp}'
     plot_field(ax1, pp, null_p, title)
     plot_spirals(ax2, pp)
+    ax1.set_xlim(-5, 5)
+    ax1.set_ylim(-0.5, 3) # was -1, 5
+    ax2.set_xlim(-5, 5)
+    ax2.set_ylim(-5, 5)
+    ax1.set_aspect('equal')
+    ax2.set_aspect('equal')
+    plt.tight_layout(pad=0)
     print(f'# {{{pdf}}}')
     plt.savefig(pdf)
 
-def do_plots(noun, null_p):
+def do_plots(null_p, maxU, fnames):
     if 0: spiral_demo()
     if 0: ex_spiral_demo()
-    fname = noun
-    with open(fname) as file:
-        for line in file:
-            if line.startswith('idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle'):
-                continue
-            idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle,grad1,grad2 = line.rstrip().split(',')
-            if float(U) > 1e-6:
-                continue
-            pp = Spirals()
-            pp.set(rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2)
-            pdf = fname.replace('.csv', '')
-            pdf = f'{pdf}.{idx}.{seed}.pdf'
-            plot_field_and_spirals(pdf, idx, seed, pp, null_p)
+    for fname in fnames:
+        with open(fname) as file:
+            format = None
+            tau = None
+            gamma = None
+            for line in file:
+                if line.startswith('idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle'):
+                    format = 1
+                    continue
+                elif line.startswith('seed,tau,gamma,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle,grad'):
+                    format = 2
+                    continue
+                if format == 1:
+                    idx,seed,dim,vars,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle,grad1,grad2 = line.rstrip().split(',')
+                elif format == 2: # with gradient optimizer
+                    seed,tau,gamma,rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2,n1,n2,U,angle,grad = line.rstrip().split(',')
+                else:
+                    assert False
+                if float(U) > maxU:
+                    continue
+                pp = Spirals()
+                pp.set(rho_max,xc1,dx,z1,z2,a1,a2,d1,d2,Ir,ex1,ex2)
+                pdf = fname.replace('.csv', '')
+                pdf = f'{pdf}.{seed}.pdf'
+                plot_field_and_spirals(pdf, float(tau), float(gamma), seed, pp, null_p)
 
 def do_join(fnames):
     header = False
@@ -441,7 +494,10 @@ if __name__ == '__main__':
     assert len(sys.argv) >= 3
     verb, noun = sys.argv[1], sys.argv[2]
     if verb == 'plot':
-        do_plots(noun, null_p)
+        assert len(sys.argv) > 3
+        maxU = float(noun)
+        fnames = sys.argv[3:]
+        do_plots(null_p, maxU, fnames)
     elif verb == 'run':
         play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir']
         # play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'Ir'] # no ex
