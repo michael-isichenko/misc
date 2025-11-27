@@ -53,7 +53,7 @@ class SpiralBounds:
     c2  = (0,  3)
     a1  = (0.2, 2)
     a2  = (0.2, 2)
-    dx1 = (0, 0.039)
+    dx1 = (-0.039, 0)
     dx2 = (0, 0.039)
     Ir  = (-1, -0.2) # second spiral current opposite and smaller than first
 
@@ -244,7 +244,7 @@ def write_result(fname, seed, vars, result, B_at_null, angle, grad, tau, gamma):
     if not isinstance(B_at_null, float): B_at_null = B_at_null[0]
     if not isinstance(angle, float): angle = angle[0]
     if not isinstance(grad, float): grad = grad[0]
-    print(f'{seed},{tau},{gamma},{",".join(values)},{pp.n1()},{pp.n2()},{result.fun},{B_at_null},{angle},{grad}', file=fp)
+    print(f'{seed},{tau},{gamma},{",".join(values)},{pp.n(0)},{pp.n(1)},{result.fun},{B_at_null},{angle},{grad}', file=fp)
     fp.close()
 
 def optimize_over_spirals(null_p, key, beg_seed, nrand):
@@ -454,8 +454,8 @@ if __name__ == '__main__':
         fnames = sys.argv[3:]
         do_plots(null_p, maxU, fnames)
     elif verb == 'run':
-        play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'ex1', 'ex2', 'Ir']
-        # play_vars = ['xc1', 'dx', 'a1', 'a2', 'd1', 'd2', 'Ir'] # no ex
+        #play_vars = ['c1', 'c2', 'a1', 'a2', 'dx1', 'dx2', 'Ir'] # full 7
+        play_vars = ['c1', 'c2', 'a1', 'a2', 'Ir'] # 5, no dx
         dim = len(play_vars) # how many parameters (out ot 9) to play with at a time
         key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
         do_runs(noun, null_p, play_vars, dim, key)
