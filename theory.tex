@@ -26,9 +26,10 @@ field of a closed current loop $\bfL(t)$ equals
 \bfb(\bfx,t) = \frac{\dot\bfL\times(\bfx-\bfL)}{D^3},\quad D\equiv|\bfx-\bfL|.
 \end{equation}
 A circular loop in the $(x,y)$ plane is defined parametrically by
-$\bfL(t)=(a\cos(t),a\sin(t),0)$.\footnote{If the loop is raised to
-height $z=\zeta$, the field formulas remain the same under the change
-$\bfB(x,y,x)\to\bfB(x,y,z-\zeta)$.}
+$\bfL(t)=(r\cos(t),r\sin(t),0)$.\footnote{If the loop center is at
+$(x, y, z)=(\xi, 0, \zeta)$ instead of the origin, the field formulas
+remain the same under the change
+$\bfB(x,y,x)\to\bfB(x-\xi,y,z-\zeta)$.}
 
 Component-wise, we have
 \begin{equation}
@@ -37,16 +38,16 @@ b_x &= \frac{\dot L_y(z-L_z) - \dot L_z(x-L_x)}{D^3} = \frac{\dot L_yz}{D^3},\\
 b_y &= \frac{\dot L_z(x-L_x) - \dot L_x(z-L_z)}{D^3} = -\frac{\dot L_xz}{D^3},\\
 b_z &= \frac{\dot L_x(y-L_y) - \dot L_y(x-L_x)}{D^3}
 = \frac{L_x\dot L_y-L_y\dot L_x + \dot L_xy - \dot L_y x}{D^3}
-= \frac{a^2 + \dot L_xy - \dot L_y x}{D^3}.
+= \frac{r^2 + \dot L_xy - \dot L_y x}{D^3}.
 \end{aligned}
 \end{equation}
 Here the condition $L_z\equiv0$ is applied for a flat $(x,y)$ loop.  In terms of the parameter $t$,
 \begin{equation}
 \begin{aligned}
-b_x &= \frac{az\cos(t)}{D^3},\\
-b_y &= \frac{az\sin(t)}{D^3},\\
-b_z &= a\frac{a - x\cos(t) - y\sin(t)}{D^3},\\
-D   &= \sqrt{(x - a\cos(t))^2 + (y - a\sin(t))^2 + z^2}
+b_x &= \frac{rz\cos(t)}{D^3},\\
+b_y &= \frac{rz\sin(t)}{D^3},\\
+b_z &= r\frac{r - x\cos(t) - y\sin(t)}{D^3},\\
+D   &= \sqrt{(x - r\cos(t))^2 + (y - r\sin(t))^2 + z^2}
 \end{aligned}
 \end{equation}
 Note that, for $y=0$, $D$ is an even function of $t$, and $B_y=\int_{-\pi}^\pi b_y\,dt=0$.
@@ -54,11 +55,11 @@ Note that, for $y=0$, $D$ is an even function of $t$, and $B_y=\int_{-\pi}^\pi b
 Derivatives of the infinitesimal field:
 \begin{equation}
 \begin{aligned}
-b_{x,x} &= -3az\frac{\cos(t)(x-a\cos(t))}{D^5},\\
-b_{y,y} &= -3az\frac{\sin(t)(y-a\sin(t))}{D^5},\\
-b_{z,z} &=  3az\frac{x\cos(t) + y\sin(t) - a}{D^5},\\
-b_{x,z} &=  \frac{a\cos(t)}{D^3}\left(1-3\frac{z^2}{D^2}\right),\\
-b_{z,x} &= -\frac{a\cos(t)}{D^3} -3a\frac{(x-a\cos(t))(a-x\cos(t)-y\sin(t))}{D^5}.
+b_{x,x} &= -3rz\frac{\cos(t)(x-r\cos(t))}{D^5},\\
+b_{y,y} &= -3rz\frac{\sin(t)(y-r\sin(t))}{D^5},\\
+b_{z,z} &=  3rz\frac{x\cos(t) + y\sin(t) - r}{D^5},\\
+b_{x,z} &=  \frac{r\cos(t)}{D^3}\left(1-3\frac{z^2}{D^2}\right),\\
+b_{z,x} &= -\frac{r\cos(t)}{D^3} -3r\frac{(x-r\cos(t))(r-x\cos(t)-y\sin(t))}{D^5}.
 \end{aligned}
 \end{equation}
 It is immediately verified that
@@ -69,7 +70,7 @@ $B_{x,z}=B_{z,x}$ is valid only for the total field after $\oint dt$
 over $[0,2\pi]$.  Proving this in general by integrating the
 derivatives above by $t$ is very difficult, as elliptic integrals are
 involved.  {\sl Mathematica} consistenly evaluates $B_{x,z}-B_{x,z}$ at
-various random values of $(a,x,y,z)$ as exact zero, which cannot be a
+various random values of $(r,x,y,z)$ as exact zero, which cannot be a
 coincidence.
 
 \subsection{{\sl Mathematica} checks}
@@ -78,9 +79,9 @@ Wolfram Cloud was used to verify above derivative formulas.  Some of
 {\tt TeXForm} expressions:
 \begin{equation}
 \begin{aligned}
-b_{x,z} &= \frac{a \cos (t) \left(a^2-2 a x \cos (t)-2 a y \sin (t)+x^2+y^2-2
-   z^2\right)}{\left((x-a \cos (t))^2+(y-a \sin (t))^2+z^2\right)^{5/2}},\\
-b_{z,x} &= \frac{a\left(-\cos(t)\left(-2a^2+ay\sin(t)-2x^2+y^2+z^2\right)-3x(a-y\sin(t))-ax\cos^2(t)\right)}{\left(a^2-2ax\cos(t)-2ay\sin(t)+x^2+y^2+z^2\right)^{5/2}}.
+b_{x,z} &= \frac{r \cos (t) \left(r^2-2 r x \cos (t)-2 r y \sin (t)+x^2+y^2-2
+   z^2\right)}{\left((x-r \cos (t))^2+(y-r \sin (t))^2+z^2\right)^{5/2}},\\
+b_{z,x} &= \frac{r\left(-\cos(t)\left(-2r^2+ry\sin(t)-2x^2+y^2+z^2\right)-3x(r-y\sin(t))-rx\cos^2(t)\right)}{\left(r^2-2rx\cos(t)-2ry\sin(t)+x^2+y^2+z^2\right)^{5/2}}.
 \end{aligned}
 \end{equation}
 
@@ -228,18 +229,18 @@ stimiulus to have the right null point at a right angle.
 $i$th circle in a ``spiral'' has the $x$ position and center and the
 radius
 \begin{equation}
-  x_i = x_0 + i\,\delta x,\quad r_i=r_0 + i\,\delta r,\quad i<n,
+  x_i = c + i\,\delta x,\quad r_i=a + i\,\delta r,\quad i<n,
 \end{equation}
 where $\delta x$ is ``excentricity,'' or center displacement per
 ``revolution,'' and $\delta r>0$ is the radius increment.  To avoid
 self-intersection of the circles, we must obviously have $|\delta
 x|<\delta r$.  The coil densities on the two sides are $(\delta r \pm
-\delta x)^{-1}$.  The max coil density $\rho_{max}=25\,cm^{-1}$ should
+\delta x)^{-1}$.  The max coil density $\rho=25\,cm^{-1}$ should
 be realized on one side, meaning that the radius increment is either
 fixed for concentric circles or uniquely determined by the
 excentricity:
 \begin{equation}
-  \delta r = \rho_{max}^{-1} + |\delta x|
+  \delta r = \rho^{-1} + |\delta x|
 \end{equation}
 The outermost circle extends to
 \begin{equation}
@@ -252,21 +253,33 @@ reaches the board boundaries $\pm X$ where $X=5\,cm$.  At least such a
 requirement would allow to minimize $X$.  So we want the first of the
 following two equations to hold as $n$ is increased:
 \begin{equation}
-  x_0 + (n - 1)\delta x \pm [r_0 + (n - 1)(\rho_{max}^{-1} + |\delta x|)] = \pm X.
+  c + (n - 1)\delta x \pm [a + (n - 1)(\rho^{-1} + |\delta x|)] = \pm X.
 \end{equation}
 This gives
 \begin{equation}
   \begin{aligned}
     n - 1
-    &=  \min\left(\frac{\pm (X - r_0) - x_0}{\delta x \pm (\rho_{max}^{-1} + |\delta x|)}\right)\\
+    &=  \min\left(\frac{\pm (X - a) - c}{\delta x \pm (\rho^{-1} + |\delta x|)}\right)\\
     &= \min\left(
-    \frac{X-r_0-x_0}{\rho_{max}^{-1}+2\delta x^+},
-    \frac{-X+r_0-x_0}{-\rho_{max}^{-1}+2\delta x^-}\right)\\
+    \frac{X - a - c}{\rho^{-1}+2\delta x^+},
+    \frac{-X + a - c}{-\rho^{-1}+2\delta x^-}\right)\\
     &= \min\left(
-    \frac{X-r_0-x_0}{\rho_{max}^{-1}+2\delta x^+},
-    \frac{X-r_0+x_0}{\rho_{max}^{-1}-2\delta x^-}\right).
+    \frac{X - a - c}{\rho^{-1}+2\delta x^+},
+    \frac{X - a + c}{\rho^{-1}-2\delta x^-}\right).
   \end{aligned}
 \end{equation}
-  
+Consistency conditin $n>1$ requires $a<X$ and $|c|<X-a$. Since {\tt
+  scipy.minimize} supports only rectangular constrains, {SpiralBounds}
+have to be more restrictive.  As an option, the utility function can
+return a large (bad) number for an invalid spiral geometry.
+
+With these constraints, there are just 3 free parameters of a
+``spiral:'' the inner center and radius and the excentricity $(c, a,
+\delta x)$.  If desired, the half-size of the board $X$ can also be
+played with.  For two spirals and the current ratio {\tt Ir}, we have
+a 7D search space ({\tt c1,c2,a1,a2,dx1,dx2,Ir}).  For multiple loop
+layers to support higher total current and field, the search space
+will be larger unless some layers are synchronized, that is, made
+identical except height $z$.
 
 \end{document}
