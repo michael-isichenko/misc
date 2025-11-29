@@ -7,7 +7,7 @@ Saving resuts to file, no plotting.
 import os
 import sys
 from dataclasses import dataclass, fields
-from scipy.optimize import minimize
+from scipy.optimize import minimize, NonlinearConstraint
 import scipy.integrate as integrate
 from itertools import combinations
 from datetime import datetime
@@ -27,8 +27,9 @@ NL:  int   = 2     # number of layers
 Z1:  float = -0.25 # z-height of 1st spiral - blue
 Z2:  float = -0.35 # z-height of 2nd spiral - green
 RHO: float = 25    # max loop density
-X:   float = 5     # half-size of teh board
+X:   float = 5     # half-size of the board
 assert NL == 2
+USE_NONLINEAR_CONSTRAINT = True
 
 def ZZ(k):
     if 0 == k: return Z1
@@ -49,13 +50,17 @@ def help_dr(dx):   # radius increment per revolution, eq (18)
 
 @dataclass
 class SpiralBounds:
-    c1  = (-3, 0)
-    c2  = (0,  3)
+    c1  = (-3, -0.5)
+    c2  = (0.5,  3)
     a1  = (0.2, 2)
     a2  = (0.2, 2)
     dx1 = (-0.039, 0)
     dx2 = (0, 0.039)
-    Ir  = (-1, -0.2) # second spiral current opposite and smaller than first
+    Ir  = (0.2, 1) # second spiral current opposite and smaller than first
+
+'''
+20251127:182841 Ir > 0 and more separated centers
+'''
 
 @dataclass
 class Spirals:
@@ -65,7 +70,7 @@ class Spirals:
     a2:  float =  0.5
     dx1: float = 0     # center x-shift per loop (excentricity)
     dx2: float = 0 
-    Ir:  float = -1.0  # I2/I1
+    Ir:  float = 1.0  # I2/I1
     # dependent properties:
     def n(self, k): # number of circles
         if 0 == k: return help_n(self.c1, self.a1, self.dx1)
@@ -89,15 +94,16 @@ class Spirals:
         self.dx1 = float(dx1)
         self.dx2 = float(dx2)
         self.Ir  = float(Ir)
-    def randomize(self, seed, bounds):
+    def randomize(self, vars, seed, bounds):
+        # print(f'seed={seed}', file=sys.stderr)
         random.seed(seed)
-        self.c1  = random.uniform(bounds.c1[0], bounds.c1[1])
-        self.c2  = random.uniform(bounds.c2[0], bounds.c2[1])
-        self.a1  = random.uniform(bounds.a1[0], bounds.a1[1])
-        self.a2  = random.uniform(bounds.a2[0], bounds.a2[1])
-        self.dx1 = random.uniform(bounds.dx1[0], bounds.dx1[1])
-        self.dx2 = random.uniform(bounds.dx2[0], bounds.dx2[1])
-        self.Ir  = random.uniform(bounds.Ir[0], bounds.Ir[1])
+        if 'c1'  in vars: self.c1  = random.uniform(bounds.c1[0],  bounds.c1[1])
+        if 'c2 ' in vars: self.c2  = random.uniform(bounds.c2[0],  bounds.c2[1])
+        if 'a1 ' in vars: self.a1  = random.uniform(bounds.a1[0],  bounds.a1[1])
+        if 'a2 ' in vars: self.a2  = random.uniform(bounds.a2[0],  bounds.a2[1])
+        if 'dx1' in vars: self.dx1 = random.uniform(bounds.dx1[0], bounds.dx1[1])
+        if 'dx2' in vars: self.dx2 = random.uniform(bounds.dx2[0], bounds.dx2[1])
+        if 'Ir'  in vars: self.Ir  = random.uniform(bounds.Ir[0],  bounds.Ir[1])
         
     def __str__(self): # make Params object printable
         n = 4 # precision
@@ -194,7 +200,7 @@ def get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz):
         grad = (vx2**2 + 2*vx2*vz*Bxz + vz**2*Bzz)/(vx2**2 + vz**2)
     return angle, slope, np.abs(grad)
 
-def search_params_with_grad(null_p, vars, pp, tau, gamma):
+def search_params(null_p, vars, pp, tau, gamma):
     T = np.tan(36.0*np.pi/180)
     # pp is default/initial params
     bb = SpiralBounds()
@@ -202,7 +208,7 @@ def search_params_with_grad(null_p, vars, pp, tau, gamma):
     B_at_null = None
     angle = None
     grad = None
-    def utility2(values):
+    def utility(values):
         nonlocal B_at_null
         nonlocal angle
         nonlocal grad
@@ -223,9 +229,59 @@ def search_params_with_grad(null_p, vars, pp, tau, gamma):
     initial_values = [getattr(pp, var) for var in vars]
     bounds         = [getattr(bb, var) for var in vars]
     def callback(x):
-        #print(f'U({x}) = {utility2(x)}', file=sys.stderr, flush=True)
-        print(f'U({", ".join([str(v) for v in x])}) = {utility2(x)}', file=sys.stderr, flush=True)
-    result = minimize(utility2, initial_values, bounds=bounds) # , callback=callback)
+        #print(f'U({x}) = {utility(x)}', file=sys.stderr, flush=True)
+        print(f'U({", ".join([str(v) for v in x])}) = {utility(x)}', file=sys.stderr, flush=True)
+    result = minimize(utility, initial_values, bounds=bounds) # , callback=callback)
+    return result, B_at_null, angle, grad
+
+def search_params_constraint(null_p, vars, pp, tau, gamma):
+    T = np.tan(36.0*np.pi/180)
+    bb = SpiralBounds()
+    null_x, null_y, null_z = null_p
+    B_at_null = [1e6]
+    angle = [0.0]
+    grad = [0.0]
+
+    def B2_fun(values):
+        nonlocal B_at_null
+        for var, value in zip(vars, values):
+            setattr(pp, var, value) # set pp.<var> = value
+        if not pp.is_valid():
+            return 1e6
+        B = total_B(null_x, null_y, null_z, pp)
+        B2 = np.sum(np.square(B))
+        B_at_null = np.sqrt(B2)
+        return B2
+
+    def slope_fun(values):
+        for var, value in zip(vars, values):
+            setattr(pp, var, value) # set pp.<var> = value
+        if not pp.is_valid():
+            return 1e6
+        Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
+        angle, slope, grad = get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz)
+        return slope - T
+
+    B2_con    = NonlinearConstraint(B2_fun, 0.0, 0.0)
+    slope_con = NonlinearConstraint(slope_fun, 0.0, 0.0)
+        
+    def utility(values):
+        nonlocal B_at_null
+        nonlocal angle
+        nonlocal grad
+        for var, value in zip(vars, values):
+            setattr(pp, var, value) # set pp.<var> = value
+        if not pp.is_valid():
+            return [0.0]
+        Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
+        angle, slope, grad = get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz)
+        return -grad**2
+    initial_values = [getattr(pp, var) for var in vars]
+    bounds         = [getattr(bb, var) for var in vars]
+    def callback(x):
+        #print(f'U({x}) = {utility(x)}', file=sys.stderr, flush=True)
+        print(f'U({", ".join([str(v) for v in x])}) = {utility(x)}', file=sys.stderr, flush=True)
+    result = minimize(utility, initial_values, bounds=bounds, constraints=[B2_con, slope_con]) # , callback=callback)
     return result, B_at_null, angle, grad
 
 def write_result(fname, seed, vars, result, B_at_null, angle, grad, tau, gamma):
@@ -247,33 +303,35 @@ def write_result(fname, seed, vars, result, B_at_null, angle, grad, tau, gamma):
     print(f'{seed},{tau},{gamma},{",".join(values)},{pp.n(0)},{pp.n(1)},{result.fun},{B_at_null},{angle},{grad}', file=fp)
     fp.close()
 
-def optimize_over_spirals(null_p, key, beg_seed, nrand):
-    vars = ['c1', 'c2', 'a1', 'a2', 'dx1', 'dx2', 'Ir'] # search space
+def optimize_over_spirals(null_p, key, vars, beg_seed, nrand):
     pp = Spirals()
     tau = 50
     gamma = 1e-4
     for rand in range(nrand):
         seed = beg_seed + rand
-        pp.randomize(seed, SpiralBounds())
+        pp.randomize(vars, seed, SpiralBounds())
         print(f'seed={seed} starting with {pp}')
-        result, B_at_null, angle, grad = search_params_with_grad(null_p, vars, pp, tau, gamma)
+        if USE_NONLINEAR_CONSTRAINT:
+            result, B_at_null, angle, grad = search_params_constraint(null_p, vars, pp, tau, gamma)
+        else:
+            result, B_at_null, angle, grad = search_params(null_p, vars, pp, tau, gamma)
         fname = f'{key}.spirals.{os.getpid()}.csv'
         if not isinstance(B_at_null, float): B_at_null = B_at_null[0]
         if not isinstance(angle, float): angle = angle[0]
         if not isinstance(grad, float): grad = grad[0]
         write_result(fname, seed, vars, result, B_at_null, angle*180/np.pi, grad, tau, gamma)
 
-def run_seed(seed, null_p, play_vars, dim, key):
-    optimize_over_spirals(null_p, key, seed, nrand=200)
+def run_seed(seed, null_p, vars, dim, key):
+    optimize_over_spirals(null_p, key, vars, seed, nrand=200)
                 
-def do_runs(noun, null_p, play_vars, dim, key):
+def do_runs(noun, null_p, vars, dim, key):
     if noun == 'multi':
         seeds = [1000*i for i in range(8)]
         for seed in seeds:
             print(f'{sys.argv[0]} run {seed}')
     else:
         seed = int(noun)
-        run_seed(int(noun), null_p, play_vars, dim, key)
+        run_seed(int(noun), null_p, vars, dim, key)
 
 '''
 plotting
@@ -454,11 +512,11 @@ if __name__ == '__main__':
         fnames = sys.argv[3:]
         do_plots(null_p, maxU, fnames)
     elif verb == 'run':
-        #play_vars = ['c1', 'c2', 'a1', 'a2', 'dx1', 'dx2', 'Ir'] # full 7
-        play_vars = ['c1', 'c2', 'a1', 'a2', 'Ir'] # 5, no dx
-        dim = len(play_vars) # how many parameters (out ot 9) to play with at a time
+        #vars = ['c1', 'c2', 'a1', 'a2', 'dx1', 'dx2', 'Ir'] # full 7
+        vars = ['c1', 'c2', 'a1', 'a2', 'Ir'] # 5, no dx
+        dim = len(vars) # how many parameters (out ot 9) to play with at a time
         key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
-        do_runs(noun, null_p, play_vars, dim, key)
+        do_runs(noun, null_p, vars, dim, key)
     elif verb == 'join':
         assert len(sys.argv) > 3
         do_join(sys.argv[2:])

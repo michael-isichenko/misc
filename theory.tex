@@ -1,6 +1,7 @@
 \documentclass[10pt]{article}
 \usepackage{amsmath} % aligned
 \usepackage{tikz}
+\usepackage{hyperref}
 \usepackage{geometry}
 \geometry{margin=1in}
 \newcommand{\bfL}{{\bf L}}
@@ -201,9 +202,12 @@ or just the one with a smaller $|{v_z}/v_x|$ ratio.  Denote this
 ``relevant'' separatrix vector by $\bfv$ -- without an index.  Then we
 can formulate the new utility
 \begin{equation}
-  U = |\bfB(x_0,0,z_0)|^2
-  + \tau\left(\left|\frac{v_z}{v_x}\right| - T\right)^2
-  - \gamma\left|\frac{v_x^2B_{x,x} + 2v_xv_zB_{x,z}+v_z^2B_{z,z}}{v_x^2+v_z^2}\right|^2,
+  \begin{aligned}
+    U   &= U_B + \tau U_\theta + \gamma U_{grad},\\
+    U_B &= |\bfB(x_0,0,z_0)|^2,\\
+    U_\theta &= \left(\left|\frac{v_z}{v_x}\right| - T\right)^2,\\
+    U_{grad} &= -\left|\frac{v_x^2B_{x,x} + 2v_xv_zB_{x,z}+v_z^2B_{z,z}}{v_x^2+v_z^2}\right|^2.
+  \end{aligned}
   \label{U3}
 \end{equation}
 where $\bfv$ is the relevant one of the two in Eq.~(\ref{v12}).
@@ -218,11 +222,18 @@ The third (gradient) term has the same structure is the first term
 which we want to be very close to zero, so we must use $\gamma\ll1$.
 Adding a small $\gamma$ factor will drive $U$ negative and introduce a
 trade-off between exact geometry and good gradient.  The optimal value
-of $\gamma$ is not {\em a priori} known and needs to be experimented with.
-
-As an option, the first two (geometry) terms in (\ref{U3}) can use
-absolute values instead of squares.  That would make a stronger
+of $\gamma$ is not {\em a priori} known and needs to be experimented
+with.  As an option, the first two (geometry) terms in (\ref{U3}) can
+use absolute values instead of squares.  That would make a stronger
 stimiulus to have the right null point at a right angle.
+
+A problem with the gradient term is that the optimizer can happily
+increase the gradient at the expense of minimizing $U_B$ and
+$U_\theta$.  It would be nice to have an algorithm maximizing
+$U_{grad}$ subject to $U_B=U_\theta=0$ as constraints, but this type
+of optimizer appears difficult to implement.  Still there is
+\href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.NonlinearConstraint.html}{\tt
+    scipy.ooptimize.NonlinearConstraint}.
 
 \section{Geometry constraints}
 
