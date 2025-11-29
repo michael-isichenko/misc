@@ -333,10 +333,7 @@ def do_runs(noun, null_p, vars, dim, key):
         seed = int(noun)
         run_seed(int(noun), null_p, vars, dim, key)
 
-'''
-plotting
-'''
-def spiral_demo():
+def do_demo(noun):
     '''
     A spiral is modeled by a family of concentric circles.  This
     looks okay, because the mean radial current due to the converging
@@ -345,17 +342,18 @@ def spiral_demo():
     '''
     fig = plt.figure(figsize=(12,8))
     ax  = fig.add_subplot(1, 1, 1)
-    for i in range(10):
-        ax.add_patch(Circle((-1.5, 0), 0.5+0.1*i, lw=1, alpha=0.7,
-                            facecolor='none', edgecolor='blue'))
-    tt = np.linspace(0, 20*np.pi, 1000, endpoint=False)
-    rr = 0.5 + 1.0*tt/(20*np.pi)
-    xx = 1.5 + rr*np.cos(tt)
-    yy = 0.0 + rr*np.sin(tt)
-    ax.plot(xx, yy, color='red', lw=1)
-    ax.add_artist(lines.Line2D([xx[0], xx[-1]+0.1], [yy[0], 0], linewidth=1, color='red'))
-    ax.add_artist(lines.Line2D([xx[-1], xx[-1]+0.1], [yy[-1], yy[-1]], linewidth=1, color='red'))
-    ax.set_aspect('equal')
+    if noun == 'spiral':
+        for i in range(10):
+            ax.add_patch(Circle((-1.5, 0), 0.5+0.1*i, lw=1, alpha=0.7,
+                                facecolor='none', edgecolor='blue'))
+            tt = np.linspace(0, 20*np.pi, 1000, endpoint=False)
+            rr = 0.5 + 1.0*tt/(20*np.pi)
+            xx = 1.5 + rr*np.cos(tt)
+            yy = 0.0 + rr*np.sin(tt)
+            ax.plot(xx, yy, color='red', lw=1)
+            ax.add_artist(lines.Line2D([xx[0], xx[-1]+0.1], [yy[0], 0], linewidth=1, color='red'))
+            ax.add_artist(lines.Line2D([xx[-1], xx[-1]+0.1], [yy[-1], yy[-1]], linewidth=1, color='red'))
+            ax.set_aspect('equal')
     #plt.show()
     plt.savefig('tmp.pdf')
 
@@ -520,5 +518,7 @@ if __name__ == '__main__':
     elif verb == 'join':
         assert len(sys.argv) > 3
         do_join(sys.argv[2:])
+    elif verb == 'demo':
+        do_demo(noun)
     else:
         assert False
