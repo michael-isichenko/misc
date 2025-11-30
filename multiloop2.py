@@ -29,7 +29,7 @@ Z2:  float = -0.35 # z-height of 2nd spiral - green
 RHO: float = 25    # max loop density
 X:   float = 5     # half-size of the board
 assert NL == 2
-USE_NONLINEAR_CONSTRAINT = True
+USE_NONLINEAR_CONSTRAINT = False # it can't
 
 def ZZ(k):
     if 0 == k: return Z1
@@ -40,23 +40,30 @@ def colors(k):
     else:      return 'green'
 
 # helper geometry functions:
-def help_n(c, a, dx): # number of circles, eq (21)
-    dxp = dx if dx > 0 else 0.0
-    dxm = dx if dx < 0 else 0.0
-    return int(min((X-a-c)/(1.0/RHO + 2.0*dxp),
-                   (X-a+c)/(1.0/RHO - 2.0*dxm)))
+def help_n(a, b, c, dx):
+    if False:
+        # number of circles, eq (21)
+        dxp = dx if dx > 0 else 0.0
+        dxm = dx if dx < 0 else 0.0
+        return int(min((X-a-c)/(1.0/RHO + 2.0*dxp),
+                       (X-a+c)/(1.0/RHO - 2.0*dxm)))
+    else:
+        return int(RHO*(b - a - np.abs(dx)))
+
 def help_dr(dx):   # radius increment per revolution, eq (18)
     return 1.0/RHO + np.abs(dx)
 
 @dataclass
 class SpiralBounds:
-    c1  = (-3, -0.5)
-    c2  = (0.5,  3)
-    a1  = (0.2, 2)
-    a2  = (0.2, 2)
-    dx1 = (-0.039, 0)
-    dx2 = (0, 0.039)
-    Ir  = (0.2, 1) # second spiral current opposite and smaller than first
+    a1  = (0.2, 0.5)
+    a2  = (0.2, 0.4)
+    b1  = (0.6, 2.0)
+    b2  = (0.6, 1.5)
+    c1  = (-3., -1.0)
+    c2  = (1.0, 3.0)
+    dx1 = (-0.038, 0)
+    dx2 = (0, 0.038)
+    Ir  = (0.2, 1) # lower 2nd spiral current
 
 '''
 20251127:182841 Ir > 0 and more separated centers
@@ -64,17 +71,19 @@ class SpiralBounds:
 
 @dataclass
 class Spirals:
-    c1:  float = -0.5  # x-position of center of inner circle
-    c2:  float =  0.5
-    a1:  float =  0.5  # min_radius
-    a2:  float =  0.5
-    dx1: float = 0     # center x-shift per loop (excentricity)
-    dx2: float = 0 
-    Ir:  float = 1.0  # I2/I1
+    a1:  float =  0.2  # min_radius
+    a2:  float =  0.2
+    b1:  float =  1.5  # max_radius
+    b2:  float =  1.0
+    c1:  float = -2.0  # x-position of center of inner circle
+    c2:  float =  1.5
+    dx1: float =  0    # optional center x-shift per loop (excentricity)
+    dx2: float =  0 
+    Ir:  float =  1.0  # I2/I1
     # dependent properties:
     def n(self, k): # number of circles
-        if 0 == k: return help_n(self.c1, self.a1, self.dx1)
-        else:      return help_n(self.c2, self.a2, self.dx2)
+        if 0 == k: return help_n(self.a1, self.b1, self.c1, self.dx1)
+        else:      return help_n(self.a2, self.b2, self.c2, self.dx2)
     def xx(self, k): # centers circles
         if 0 == k: return [self.c1 + self.dx1*i for i in range(self.n(k))]
         else:      return [self.c2 + self.dx2*i for i in range(self.n(k))]
@@ -86,21 +95,25 @@ class Spirals:
             if self.n(k) < 10:
                 return False
         return True
-    def set(self, c1,c2,a1,a2,dx1,dx2,Ir):
-        self.c1  = float(c1)
-        self.c2  = float(c2)
+    def set(self, a1,a2,b1,b2,c1,c2,dx1,dx2,Ir):
         self.a1  = float(a1)
         self.a2  = float(a2)
+        self.b1  = float(b1)
+        self.b2  = float(b2)
+        self.c1  = float(c1)
+        self.c2  = float(c2)
         self.dx1 = float(dx1)
         self.dx2 = float(dx2)
         self.Ir  = float(Ir)
     def randomize(self, vars, seed, bounds):
         # print(f'seed={seed}', file=sys.stderr)
         random.seed(seed)
-        if 'c1'  in vars: self.c1  = random.uniform(bounds.c1[0],  bounds.c1[1])
-        if 'c2 ' in vars: self.c2  = random.uniform(bounds.c2[0],  bounds.c2[1])
         if 'a1 ' in vars: self.a1  = random.uniform(bounds.a1[0],  bounds.a1[1])
         if 'a2 ' in vars: self.a2  = random.uniform(bounds.a2[0],  bounds.a2[1])
+        if 'b1'  in vars: self.b1  = random.uniform(bounds.b1[0],  bounds.c1[1])
+        if 'b2 ' in vars: self.b2  = random.uniform(bounds.b2[0],  bounds.c2[1])
+        if 'c1'  in vars: self.c1  = random.uniform(bounds.c1[0],  bounds.c1[1])
+        if 'c2 ' in vars: self.c2  = random.uniform(bounds.c2[0],  bounds.c2[1])
         if 'dx1' in vars: self.dx1 = random.uniform(bounds.dx1[0], bounds.dx1[1])
         if 'dx2' in vars: self.dx2 = random.uniform(bounds.dx2[0], bounds.dx2[1])
         if 'Ir'  in vars: self.Ir  = random.uniform(bounds.Ir[0],  bounds.Ir[1])
@@ -108,8 +121,9 @@ class Spirals:
     def __str__(self): # make Params object printable
         n = 4 # precision
         return \
-        f'c=({round(self.c1,n)},{round(self.c2,n)}), ' + \
         f'a({round(self.a1,n)},{round(self.a2,n)}), ' + \
+        f'b=({round(self.b1,n)},{round(self.b2,n)}), ' + \
+        f'c=({round(self.c1,n)},{round(self.c2,n)}), ' + \
         f'dx({round(self.dx1,n)},{round(self.dx2,n)}), ' + \
         f'n({self.n(0)},{self.n(1)}), ' + \
         f'Ir={round(self.Ir,n)}'
@@ -306,7 +320,7 @@ def write_result(fname, seed, vars, result, B_at_null, angle, grad, tau, gamma):
 def optimize_over_spirals(null_p, key, vars, beg_seed, nrand):
     pp = Spirals()
     tau = 50
-    gamma = 1e-4
+    gamma = 1e-6
     for rand in range(nrand):
         seed = beg_seed + rand
         pp.randomize(vars, seed, SpiralBounds())
@@ -334,15 +348,15 @@ def do_runs(noun, null_p, vars, dim, key):
         run_seed(int(noun), null_p, vars, dim, key)
 
 def do_demo(noun):
-    '''
-    A spiral is modeled by a family of concentric circles.  This
-    looks okay, because the mean radial current due to the converging
-    spiral is compensated by the outgoing straight wire in the opposite
-    direction.
-    '''
     fig = plt.figure(figsize=(12,8))
     ax  = fig.add_subplot(1, 1, 1)
-    if noun == 'spiral':
+    if noun == 'circles':
+        '''
+        A spiral is modeled by a family of concentric circles.  This
+        looks okay, because the mean radial current due to the converging
+        spiral is compensated by the outgoing straight wire in the opposite
+        direction.
+        '''
         for i in range(10):
             ax.add_patch(Circle((-1.5, 0), 0.5+0.1*i, lw=1, alpha=0.7,
                                 facecolor='none', edgecolor='blue'))
@@ -354,28 +368,48 @@ def do_demo(noun):
             ax.add_artist(lines.Line2D([xx[0], xx[-1]+0.1], [yy[0], 0], linewidth=1, color='red'))
             ax.add_artist(lines.Line2D([xx[-1], xx[-1]+0.1], [yy[-1], yy[-1]], linewidth=1, color='red'))
             ax.set_aspect('equal')
-    #plt.show()
-    plt.savefig('tmp.pdf')
+    elif noun == 'excentric':
+        '''
+        Excentric spiral.  Both radius and x-center increase linearly with polar angle.
+        '''
+        a, d, ex = 0.5, 2.5, 0.8
+        n = 50
+        tmax = 2*np.pi*n
+        tt = np.linspace(0, tmax, n*100, endpoint=True)
+        rr = a + d*tt/(2*np.pi*n)
+        xx = d*ex*tt/tmax + rr*np.cos(tt)
+        yy = rr*np.sin(tt)
+        ax.plot(xx, yy, color='green', lw=0.5)
+        ax.set_aspect('equal')
+    elif noun == '2loops':
+        xmin, xmax = -3, 2
+        zmin, zmax = 0, 2
+        xx, zz = np.linspace(xmin, xmax, 150), np.linspace(zmin, zmax, 150)
+        xx_grid, zz_grid = np.meshgrid(xx, zz)
+        B = [None, None]
+        xx = [-2, 1.5]
+        rr = [1, 0.5]
+        zz = [-0.05, -0.10]
+        II = [2, 1]
+        cc = ['blue', 'green']
+        density = 0.75
+        for i, (xi, ri) in enumerate(zip(xx, rr)):
+            B[i] = loop_B(xx_grid - xi, 0, zz_grid -zz[i], ri)
+            ax.add_patch(Circle((xi - ri, zz[i]), 0.03, color=cc[i], alpha=0.7))
+            ax.add_patch(Circle((xi + ri, zz[i]), 0.03, color=cc[i], alpha=0.7))
+            ax.add_artist(lines.Line2D([xi - ri,  xi + ri], [zz[i], zz[i]], linewidth=II[i], color=cc[i]))
+            ax.streamplot(xx_grid, zz_grid, B[i][0], B[i][2], density=density, color=cc[i],
+                          linewidth=0.2, cmap=plt.cm.viridis, arrowsize=0.8)
+        total_B = B[0] + B[1]
+        ax.streamplot(xx_grid, zz_grid, total_B[0], total_B[2], density=density*2, color='k',
+                      linewidth=0.5, cmap=plt.cm.viridis, arrowsize=0.8)
+        ax.set_aspect('equal')
+        # ax.set_title('')
+    else:
+        assert False
+    plt.show()
+    #plt.savefig('tmp.pdf')
 
-def ex_spiral_demo():
-    '''
-    Excentric spiral.  Both radius and x-center increase linearly with polar angle.
-    '''
-    fig = plt.figure(figsize=(12,8))
-    ax  = fig.add_subplot(1, 1, 1)
-    a, d, ex = 0.5, 2.5, 0.8
-    n = 50
-    tmax = 2*np.pi*n
-    tt = np.linspace(0, tmax, n*100, endpoint=True)
-    rr = a + d*tt/(2*np.pi*n)
-    xx = d*ex*tt/tmax + rr*np.cos(tt)
-    yy = rr*np.sin(tt)
-    ax.plot(xx, yy, color='green', lw=0.5)
-    ax.set_aspect('equal')
-
-'''
-Display (better) results of optimization.
-'''
 def mark_coils(ax, pp): # side view
     for k in range(NL):
         xx = pp.xx(k)
@@ -475,13 +509,15 @@ def do_plots(null_p, maxU, fnames):
             tau = None
             gamma = None
             for line in file:
-                seed,tau,gamma,c1,c2,a1,a2,dx1,dx2,Ir,n1,n2,U,B_at_null,angle,grad = line.rstrip().split(',')
+                seed,tau,gamma,a1,a2,b1,b2,c1,c2,dx1,dx2,Ir,n1,n2,U,B_at_null,angle,grad = line.rstrip().split(',')
                 if seed == 'seed':
                     continue # header
                 if float(U) > maxU:
                     continue
                 pp = Spirals()
-                pp.set(c1,c2,a1,a2,dx1,dx2,Ir)
+                pp.set(a1,a2,b1,b2,c1,c2,dx1,dx2,Ir)
+                #print(f'XXX {a1}, {a2}, {b1}, {b2}, {c1}, {c2}, {dx1}, {dx2}, {Ir}')
+                #print(f'XXX {pp}')
                 pdf = fname.replace('.csv', '')
                 pdf = f'{pdf}.{seed}.pdf'
                 plot_field_and_spirals(pdf, float(tau), float(gamma), seed, pp, null_p,
@@ -510,8 +546,7 @@ if __name__ == '__main__':
         fnames = sys.argv[3:]
         do_plots(null_p, maxU, fnames)
     elif verb == 'run':
-        #vars = ['c1', 'c2', 'a1', 'a2', 'dx1', 'dx2', 'Ir'] # full 7
-        vars = ['c1', 'c2', 'a1', 'a2', 'Ir'] # 5, no dx
+        vars = ['a1', 'a2', 'b1', 'b2', 'c1', 'c2', 'Ir'] # no dx
         dim = len(vars) # how many parameters (out ot 9) to play with at a time
         key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
         do_runs(noun, null_p, vars, dim, key)
