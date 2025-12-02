@@ -17,12 +17,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import matplotlib.lines as lines
 
-'''
-To say within [-R,R]^2:
-
-
-'''
-# constants
 NL:  int   = 2     # number of layers
 Z1:  float = -0.25 # z-height of 1st spiral - blue
 Z2:  float = -0.35 # z-height of 2nd spiral - green
@@ -48,6 +42,8 @@ def help_n(a, b, c, dx):
         return int(min((X-a-c)/(1.0/RHO + 2.0*dxp),
                        (X-a+c)/(1.0/RHO - 2.0*dxm)))
     else:
+        if RHO*(b - a - np.abs(dx)) < 0:
+            print(f'a={a} b={b} dx={dx} n={RHO*(b - a - np.abs(dx))}')
         return int(RHO*(b - a - np.abs(dx)))
 
 def help_dr(dx):   # radius increment per revolution, eq (18)
@@ -57,13 +53,14 @@ def help_dr(dx):   # radius increment per revolution, eq (18)
 class SpiralBounds:
     a1  = (0.2, 0.5)
     a2  = (0.2, 0.4)
-    b1  = (0.6, 2.0)
-    b2  = (0.6, 1.5)
-    c1  = (-3., -1.0)
-    c2  = (1.0, 3.0)
+    b1  = (1.0, 9.0)
+    b2  = (1.0, 9.0)
+    c1  = (-4.0, -1.0)
+    c2  = (1.0, 4.0)
     dx1 = (-0.038, 0)
     dx2 = (0, 0.038)
-    Ir  = (0.2, 1) # lower 2nd spiral current
+    Ir  = (-1, -0.5) # lower 2nd spiral current
+    #Ir  = (0.5, 1) # same direction
 
 '''
 20251127:182841 Ir > 0 and more separated centers
@@ -90,11 +87,19 @@ class Spirals:
     def rr(self, k): # radii of circles
         if 0 == k: return [self.a1 + i*help_dr(self.dx1) for i in range(self.n(k))]
         else:      return [self.a2 + i*help_dr(self.dx2) for i in range(self.n(k))]
-    def is_valid(self):
+    def geom_penalty(self):
+        pen = 0
         for k in range(NL):
-            if self.n(k) < 10:
-                return False
-        return True
+            n = self.n(k)
+            if n < 10:
+                pen += (10 - n)
+            x = self.xx(n)[-1]
+            r = self.rr(n)[-1]
+            xleft = x - r
+            xright = x + r
+            if xleft < -X: pen += (-X - xleft)
+            if xright > X: pen += (xright - X)
+        return pen
     def set(self, a1,a2,b1,b2,c1,c2,dx1,dx2,Ir):
         self.a1  = float(a1)
         self.a2  = float(a2)
@@ -110,8 +115,8 @@ class Spirals:
         random.seed(seed)
         if 'a1 ' in vars: self.a1  = random.uniform(bounds.a1[0],  bounds.a1[1])
         if 'a2 ' in vars: self.a2  = random.uniform(bounds.a2[0],  bounds.a2[1])
-        if 'b1'  in vars: self.b1  = random.uniform(bounds.b1[0],  bounds.c1[1])
-        if 'b2 ' in vars: self.b2  = random.uniform(bounds.b2[0],  bounds.c2[1])
+        if 'b1'  in vars: self.b1  = random.uniform(bounds.b1[0],  bounds.b1[1])
+        if 'b2 ' in vars: self.b2  = random.uniform(bounds.b2[0],  bounds.b2[1])
         if 'c1'  in vars: self.c1  = random.uniform(bounds.c1[0],  bounds.c1[1])
         if 'c2 ' in vars: self.c2  = random.uniform(bounds.c2[0],  bounds.c2[1])
         if 'dx1' in vars: self.dx1 = random.uniform(bounds.dx1[0], bounds.dx1[1])
@@ -119,14 +124,14 @@ class Spirals:
         if 'Ir'  in vars: self.Ir  = random.uniform(bounds.Ir[0],  bounds.Ir[1])
         
     def __str__(self): # make Params object printable
-        n = 4 # precision
+        prec = 4 # precision
         return \
-        f'a({round(self.a1,n)},{round(self.a2,n)}), ' + \
-        f'b=({round(self.b1,n)},{round(self.b2,n)}), ' + \
-        f'c=({round(self.c1,n)},{round(self.c2,n)}), ' + \
-        f'dx({round(self.dx1,n)},{round(self.dx2,n)}), ' + \
+        f'a({round(self.a1,prec)},{round(self.a2,prec)}), ' + \
+        f'b=({round(self.b1,prec)},{round(self.b2,prec)}), ' + \
+        f'c=({round(self.c1,prec)},{round(self.c2,prec)}), ' + \
+        f'dx({round(self.dx1,prec)},{round(self.dx2,prec)}), ' + \
         f'n({self.n(0)},{self.n(1)}), ' + \
-        f'Ir={round(self.Ir,n)}'
+        f'Ir={round(self.Ir,prec)}'
 
 def dB(x, y, z, r, t): # infinitesimal field of loop with radius r, eq (3)
     cos, sin = np.cos(t), np.sin(t)
@@ -228,7 +233,7 @@ def search_params(null_p, vars, pp, tau, gamma):
         nonlocal grad
         for var, value in zip(vars, values):
             setattr(pp, var, value) # set pp.<var> = value
-        if not pp.is_valid():
+        if False and not pp.is_valid():
             B_at_null = [1e6]
             angle = [0.0]
             grad = [0.0]
@@ -238,7 +243,7 @@ def search_params(null_p, vars, pp, tau, gamma):
         B_at_null = np.sqrt(B2)
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         angle, slope, grad = get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz)
-        return B2 + tau*(slope - T)**2 - gamma*grad**2
+        return B2 + tau*(slope - T)**2 - gamma*grad**2 + pp.geom_penalty()
         # return np.sum(np.abs(B)) + tau*np.abs(slope - T) - gamma*grad**2
     initial_values = [getattr(pp, var) for var in vars]
     bounds         = [getattr(bb, var) for var in vars]
@@ -260,8 +265,6 @@ def search_params_constraint(null_p, vars, pp, tau, gamma):
         nonlocal B_at_null
         for var, value in zip(vars, values):
             setattr(pp, var, value) # set pp.<var> = value
-        if not pp.is_valid():
-            return 1e6
         B = total_B(null_x, null_y, null_z, pp)
         B2 = np.sum(np.square(B))
         B_at_null = np.sqrt(B2)
@@ -270,8 +273,6 @@ def search_params_constraint(null_p, vars, pp, tau, gamma):
     def slope_fun(values):
         for var, value in zip(vars, values):
             setattr(pp, var, value) # set pp.<var> = value
-        if not pp.is_valid():
-            return 1e6
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         angle, slope, grad = get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz)
         return slope - T
@@ -285,8 +286,6 @@ def search_params_constraint(null_p, vars, pp, tau, gamma):
         nonlocal grad
         for var, value in zip(vars, values):
             setattr(pp, var, value) # set pp.<var> = value
-        if not pp.is_valid():
-            return [0.0]
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         angle, slope, grad = get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz)
         return -grad**2
@@ -320,7 +319,7 @@ def write_result(fname, seed, vars, result, B_at_null, angle, grad, tau, gamma):
 def optimize_over_spirals(null_p, key, vars, beg_seed, nrand):
     pp = Spirals()
     tau = 50
-    gamma = 1e-6
+    gamma = 0 # 1e-6
     for rand in range(nrand):
         seed = beg_seed + rand
         pp.randomize(vars, seed, SpiralBounds())
