@@ -50,6 +50,7 @@ b_y &= \frac{rz\sin(t)}{D^3},\\
 b_z &= r\frac{r - x\cos(t) - y\sin(t)}{D^3},\\
 D   &= \sqrt{(x - r\cos(t))^2 + (y - r\sin(t))^2 + z^2}
 \end{aligned}
+\label{b}
 \end{equation}
 Note that, for $y=0$, $D$ is an even function of $t$, and $B_y=\int_{-\pi}^\pi b_y\,dt=0$.
 
@@ -283,7 +284,7 @@ This gives
   \end{aligned}
 \end{equation}
 Consistency conditin $n>1$ requires $a<X$ and $|c|<X-a$. Since {\tt
-  scipy.minimize} supports only rectangular constrains, {SpiralBounds}
+  scipy.minimize} supports only rectangular constraints, {SpiralBounds}
 have to be more restrictive.  As an option, the utility function can
 return a large (bad) number for an invalid spiral geometry.
 
@@ -314,5 +315,31 @@ black are for the total field.
 This shows that the loops (or spirals) must be relatively well
 separated, shofted to one side, and the one whcih is shifted more must
 carry a larger current, both currents of the same sign.
+
+\subsection{Continuous configuration}
+
+{\tt Scipy} optimization uses numerical Hessian and can suffer from
+the non-smoothness of the utility.  It would be nice to handle the
+number of loops $n$ as a continuous variable, for example by
+considering the loops as disks with a constant surface current density
+$j$.  The magnetic field is then an integral over radius rather than a
+sum over loops.  Eqs.~(ref{b}) are to be integrated over $r$ from
+inner radius $a$ to outer $b$.  The indefinite integrals are
+tractable; {\sl Mathematica} says:
+\begin{equation}
+  \begin{aligned}
+    \int b_xdr &= \frac{2z\cos(t)}{D}
+    \frac{-x^2-y^2-z^2+rx\cos(t)+ry\sin(t)}
+         {x^2+y^2+2z^2+(y^2-x^2)\cos(2t)-2xy\sin(2t)},\\
+         \int b_zdr &= \log(D+r-x\cos(t)-y\sin(t))
+         -\frac{r}{D}.
+  \end{aligned}
+\end{equation}
+Such expressions can be readily integrated over $t$ numerically.
+(Wolfram won't integrate these symbolically.)  However, the
+derivatives $B_{x,x}$, etc., are expressions that appear too large for
+a reasonable code.
+  
+
 
 \end{document}
