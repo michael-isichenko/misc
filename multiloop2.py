@@ -35,12 +35,12 @@ def colors(k):
 
 # helper geometry functions:
 def help_n(a, b, c, dx):
-    if False:
+    if 0:
         # number of circles, eq (21)
         dxp = dx if dx > 0 else 0.0
         dxm = dx if dx < 0 else 0.0
         return int(min((X-a-c)/(1.0/RHO + 2.0*dxp),
-                       (X-a+c)/(1.0/RHO - 2.0*dxm)))
+                       (X-a+c)/(1.0/RHO - 2.0*dxm))) - 1
     else:
         if RHO*(b - a - np.abs(dx)) < 0:
             print(f'a={a} b={b} dx={dx} n={RHO*(b - a - np.abs(dx))}')
@@ -51,16 +51,16 @@ def help_dr(dx):   # radius increment per revolution, eq (18)
 
 @dataclass
 class SpiralBounds:
-    a1  = (0.2, 0.5)
-    a2  = (0.2, 0.4)
-    b1  = (1.0, 9.0)
-    b2  = (1.0, 9.0)
-    c1  = (-4.0, -1.0)
-    c2  = (1.0, 4.0)
+    a1  = (0.2, 3.0)
+    a2  = (0.2, 1.0)
+    b1  = (1.0, 4.5)
+    b2  = (1.0, 3)
+    c1  = (-4.0, -2)
+    c2  = (-1, 4.0)
     dx1 = (-0.038, 0)
     dx2 = (0, 0.038)
-    Ir  = (-1, -0.5) # lower 2nd spiral current
-    #Ir  = (0.5, 1) # same direction
+    #Ir  = (-1, -0.3) # lower 2nd spiral current
+    Ir  = (0.1, 0.5) # same direction
 
 '''
 20251127:182841 Ir > 0 and more separated centers
@@ -70,13 +70,13 @@ class SpiralBounds:
 class Spirals:
     a1:  float =  0.2  # min_radius
     a2:  float =  0.2
-    b1:  float =  1.5  # max_radius
-    b2:  float =  1.0
-    c1:  float = -2.0  # x-position of center of inner circle
-    c2:  float =  1.5
+    b1:  float =  4.0  # max_radius
+    b2:  float =  4.0
+    c1:  float = -1.0  # x-position of center of inner circle
+    c2:  float =  1.0
     dx1: float =  0    # optional center x-shift per loop (excentricity)
     dx2: float =  0 
-    Ir:  float =  1.0  # I2/I1
+    Ir:  float =  0.5  # I2/I1
     # dependent properties:
     def n(self, k): # number of circles
         if 0 == k: return help_n(self.a1, self.b1, self.c1, self.dx1)
@@ -87,18 +87,27 @@ class Spirals:
     def rr(self, k): # radii of circles
         if 0 == k: return [self.a1 + i*help_dr(self.dx1) for i in range(self.n(k))]
         else:      return [self.a2 + i*help_dr(self.dx2) for i in range(self.n(k))]
+    def is_valid(self):
+        if self.a1 >= self.b1:
+            return False
+        if self.a2 >= self.b2:
+            return False
+        for k in range(NL):
+            if self.n(k) < 5:
+                return False
+        return True
     def geom_penalty(self):
         pen = 0
         for k in range(NL):
             n = self.n(k)
             if n < 10:
-                pen += (10 - n)
+                pen += 10*(10 - n)
             x = self.xx(n)[-1]
             r = self.rr(n)[-1]
             xleft = x - r
             xright = x + r
-            if xleft < -X: pen += (-X - xleft)
-            if xright > X: pen += (xright - X)
+            if xleft < -X: pen += 100*(-X - xleft)
+            if xright > X: pen += 100*(xright - X)
         return pen
     def set(self, a1,a2,b1,b2,c1,c2,dx1,dx2,Ir):
         self.a1  = float(a1)
@@ -113,15 +122,18 @@ class Spirals:
     def randomize(self, vars, seed, bounds):
         # print(f'seed={seed}', file=sys.stderr)
         random.seed(seed)
-        if 'a1 ' in vars: self.a1  = random.uniform(bounds.a1[0],  bounds.a1[1])
-        if 'a2 ' in vars: self.a2  = random.uniform(bounds.a2[0],  bounds.a2[1])
-        if 'b1'  in vars: self.b1  = random.uniform(bounds.b1[0],  bounds.b1[1])
-        if 'b2 ' in vars: self.b2  = random.uniform(bounds.b2[0],  bounds.b2[1])
-        if 'c1'  in vars: self.c1  = random.uniform(bounds.c1[0],  bounds.c1[1])
-        if 'c2 ' in vars: self.c2  = random.uniform(bounds.c2[0],  bounds.c2[1])
-        if 'dx1' in vars: self.dx1 = random.uniform(bounds.dx1[0], bounds.dx1[1])
-        if 'dx2' in vars: self.dx2 = random.uniform(bounds.dx2[0], bounds.dx2[1])
-        if 'Ir'  in vars: self.Ir  = random.uniform(bounds.Ir[0],  bounds.Ir[1])
+        while True:
+            if 'a1 ' in vars: self.a1  = random.uniform(bounds.a1[0],  bounds.a1[1])
+            if 'a2 ' in vars: self.a2  = random.uniform(bounds.a2[0],  bounds.a2[1])
+            if 'b1'  in vars: self.b1  = random.uniform(bounds.b1[0],  bounds.b1[1])
+            if 'b2 ' in vars: self.b2  = random.uniform(bounds.b2[0],  bounds.b2[1])
+            if 'c1'  in vars: self.c1  = random.uniform(bounds.c1[0],  bounds.c1[1])
+            if 'c2 ' in vars: self.c2  = random.uniform(bounds.c2[0],  bounds.c2[1])
+            if 'dx1' in vars: self.dx1 = random.uniform(bounds.dx1[0], bounds.dx1[1])
+            if 'dx2' in vars: self.dx2 = random.uniform(bounds.dx2[0], bounds.dx2[1])
+            if 'Ir'  in vars: self.Ir  = random.uniform(bounds.Ir[0],  bounds.Ir[1])
+            if self.is_valid():
+                break
         
     def __str__(self): # make Params object printable
         prec = 4 # precision
@@ -233,7 +245,7 @@ def search_params(null_p, vars, pp, tau, gamma):
         nonlocal grad
         for var, value in zip(vars, values):
             setattr(pp, var, value) # set pp.<var> = value
-        if False and not pp.is_valid():
+        if not pp.is_valid():
             B_at_null = [1e6]
             angle = [0.0]
             grad = [0.0]
@@ -335,7 +347,7 @@ def optimize_over_spirals(null_p, key, vars, beg_seed, nrand):
         write_result(fname, seed, vars, result, B_at_null, angle*180/np.pi, grad, tau, gamma)
 
 def run_seed(seed, null_p, vars, dim, key):
-    optimize_over_spirals(null_p, key, vars, seed, nrand=200)
+    optimize_over_spirals(null_p, key, vars, seed, nrand=500)
                 
 def do_runs(noun, null_p, vars, dim, key):
     if noun == 'multi':
