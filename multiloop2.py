@@ -17,11 +17,13 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import matplotlib.lines as lines
 
+NULL_P = np.array([0.0]), np.array([0.0]), np.array([0.98]) # was 1, 0, 0.98
 NL:  int   = 2     # number of layers
 Z1:  float = -0.25 # z-height of 1st spiral - blue
 Z2:  float = -0.35 # z-height of 2nd spiral - green
 RHO: float = 25    # max loop density
 X:   float = 5     # half-size of the board
+Xright: float = 3
 assert NL == 2
 USE_NONLINEAR_CONSTRAINT = False # it can't
 
@@ -35,11 +37,11 @@ def colors(k):
 
 # helper geometry functions:
 def help_n(a, b, c, dx):
-    if 0:
+    if 1:
         # number of circles, eq (21)
         dxp = dx if dx > 0 else 0.0
         dxm = dx if dx < 0 else 0.0
-        return int(min((X-a-c)/(1.0/RHO + 2.0*dxp),
+        return int(min((Xright-a-c)/(1.0/RHO + 2.0*dxp),
                        (X-a+c)/(1.0/RHO - 2.0*dxm))) - 1
     else:
         if RHO*(b - a - np.abs(dx)) < 0:
@@ -56,7 +58,7 @@ class SpiralBounds:
     b1  = (1.0, 4.5)
     b2  = (1.0, 3)
     c1  = (-4.0, -2)
-    c2  = (-1, 4.0)
+    c2  = (-2, 2.0)
     dx1 = (-0.038, 0)
     dx2 = (0, 0.038)
     #Ir  = (-1, -0.3) # lower 2nd spiral current
@@ -104,7 +106,7 @@ class Spirals:
                 pen += 10*(10 - n)
             x = self.xx(n)[-1]
             r = self.rr(n)[-1]
-            xleft = x - r
+            xleft  = x - r
             xright = x + r
             if xleft < -X: pen += 100*(-X - xleft)
             if xright > X: pen += 100*(xright - X)
@@ -231,11 +233,11 @@ def get_relevant_angle_slope_and_grad(Bxx, Bxz, Bzx, Bzz):
         grad = (vx2**2 + 2*vx2*vz*Bxz + vz**2*Bzz)/(vx2**2 + vz**2)
     return angle, slope, np.abs(grad)
 
-def search_params(null_p, vars, pp, tau, gamma):
+def search_params(vars, pp, tau, gamma):
     T = np.tan(36.0*np.pi/180)
     # pp is default/initial params
     bb = SpiralBounds()
-    null_x, null_y, null_z = null_p
+    null_x, null_y, null_z = NULL_P
     B_at_null = None
     angle = None
     grad = None
@@ -265,10 +267,10 @@ def search_params(null_p, vars, pp, tau, gamma):
     result = minimize(utility, initial_values, bounds=bounds) # , callback=callback)
     return result, B_at_null, angle, grad
 
-def search_params_constraint(null_p, vars, pp, tau, gamma):
+def search_params_constraint(vars, pp, tau, gamma):
     T = np.tan(36.0*np.pi/180)
     bb = SpiralBounds()
-    null_x, null_y, null_z = null_p
+    null_x, null_y, null_z = NULL_P
     B_at_null = [1e6]
     angle = [0.0]
     grad = [0.0]
@@ -328,7 +330,7 @@ def write_result(fname, seed, vars, result, B_at_null, angle, grad, tau, gamma):
     print(f'{seed},{tau},{gamma},{",".join(values)},{pp.n(0)},{pp.n(1)},{result.fun},{B_at_null},{angle},{grad}', file=fp)
     fp.close()
 
-def optimize_over_spirals(null_p, key, vars, beg_seed, nrand):
+def optimize_over_spirals(key, vars, beg_seed, nrand):
     pp = Spirals()
     tau = 50
     gamma = 0 # 1e-6
@@ -337,26 +339,26 @@ def optimize_over_spirals(null_p, key, vars, beg_seed, nrand):
         pp.randomize(vars, seed, SpiralBounds())
         print(f'seed={seed} starting with {pp}')
         if USE_NONLINEAR_CONSTRAINT:
-            result, B_at_null, angle, grad = search_params_constraint(null_p, vars, pp, tau, gamma)
+            result, B_at_null, angle, grad = search_params_constraint(vars, pp, tau, gamma)
         else:
-            result, B_at_null, angle, grad = search_params(null_p, vars, pp, tau, gamma)
+            result, B_at_null, angle, grad = search_params(vars, pp, tau, gamma)
         fname = f'{key}.spirals.{os.getpid()}.csv'
         if not isinstance(B_at_null, float): B_at_null = B_at_null[0]
         if not isinstance(angle, float): angle = angle[0]
         if not isinstance(grad, float): grad = grad[0]
         write_result(fname, seed, vars, result, B_at_null, angle*180/np.pi, grad, tau, gamma)
 
-def run_seed(seed, null_p, vars, dim, key):
-    optimize_over_spirals(null_p, key, vars, seed, nrand=500)
+def run_seed(seed, vars, dim, key):
+    optimize_over_spirals(key, vars, seed, nrand=500)
                 
-def do_runs(noun, null_p, vars, dim, key):
+def do_runs(noun, vars, dim, key):
     if noun == 'multi':
         seeds = [1000*i for i in range(8)]
         for seed in seeds:
             print(f'{sys.argv[0]} run {seed}')
     else:
         seed = int(noun)
-        run_seed(int(noun), null_p, vars, dim, key)
+        run_seed(int(noun), vars, dim, key)
 
 def do_demo(noun):
     fig = plt.figure(figsize=(12,8))
@@ -438,8 +440,8 @@ def plot_spirals(ax, pp, yoff): # top view
         for x, r in zip(pp.xx(k), pp.rr(k)):
             ax.add_patch(Circle((x, yoff), r, facecolor='none', edgecolor=colors(k), alpha=0.7))
 
-def mark_x(ax, evec, null_p):
-    null_x, null_y, null_z = null_p
+def mark_x(ax, evec):
+    null_x, null_y, null_z = NULL_P
     if 0: # small marker
         ax.scatter(null_x, null_z, s=50, color='brown', marker='X')
     R = 0.5 # wheel radius
@@ -456,7 +458,7 @@ def mark_x(ax, evec, null_p):
         theta -= np.pi/2
     return theta*180/np.pi
 
-def plot_field(ax, pp, null_p, title):
+def plot_field(ax, pp, title):
     focus_on_x = False # draw only in the vicinity of the X-point
     if focus_on_x:
         xmin, xmax = -1, 1
@@ -474,10 +476,10 @@ def plot_field(ax, pp, null_p, title):
         B = total_B(xx_grid, 0, zz_grid, pp)
     # print(B)
     if 1:
-        null_x, null_y, null_z = null_p
+        null_x, null_y, null_z = NULL_P
         Bxx, Bxz, Bzx, Bzz = total_B_derivs(null_x, null_y, null_z, pp)
         evec = compute_jac_eigenvector(Bxx, Bxz, Bzx, Bzz)
-        deg = mark_x(ax, evec, null_p)
+        deg = mark_x(ax, evec)
         grads = grads_B(Bxx, Bxz, Bzx, Bzz)
     if tmp_single_check:
         ax.streamplot(xx_grid, zz_grid, Bsingle[0], Bsingle[2], density=2, color=colors(single_k),
@@ -488,7 +490,7 @@ def plot_field(ax, pp, null_p, title):
     ax.set_aspect('equal')
     ax.set_title(f'{title}: ang={round(deg, 2)} grads={round(grads[0],2)},{round(grads[1],2)}', fontsize=6)
 
-def plot_field_and_spirals(pdf, tau, gamma, seed, pp, null_p, U, B_at_null, angle, grad):
+def plot_field_and_spirals(pdf, tau, gamma, seed, pp, U, B_at_null, angle, grad):
     yoffset = -6
     fig, ax = plt.subplots(figsize=(8, 12))
     ax.hlines(y=0, xmin=-5, xmax=5, colors='black', linestyles='--', lw=1)
@@ -501,7 +503,7 @@ def plot_field_and_spirals(pdf, tau, gamma, seed, pp, null_p, U, B_at_null, angl
         title = f'seed={seed}: {pp}'
     else:
         title = f'tau={round(tau,3)} gamma={round(gamma,3)} seed={seed}: {pp}'
-    plot_field(ax, pp, null_p, title)
+    plot_field(ax, pp, title)
     mark_coils(ax, pp)
     plot_spirals(ax, pp, yoffset)
     r1 = pp.rr(0)[-1]
@@ -511,7 +513,7 @@ def plot_field_and_spirals(pdf, tau, gamma, seed, pp, null_p, U, B_at_null, angl
     print(f'# {{{pdf}}}')
     plt.savefig(pdf)
 
-def do_plots(null_p, maxU, fnames):
+def do_plots(maxU, fnames):
     if 0: spiral_demo()
     if 0: ex_spiral_demo()
     for fname in fnames:
@@ -531,7 +533,7 @@ def do_plots(null_p, maxU, fnames):
                 #print(f'XXX {pp}')
                 pdf = fname.replace('.csv', '')
                 pdf = f'{pdf}.{seed}.pdf'
-                plot_field_and_spirals(pdf, float(tau), float(gamma), seed, pp, null_p,
+                plot_field_and_spirals(pdf, float(tau), float(gamma), seed, pp,
                                        float(U), float(B_at_null), float(angle), float(grad))
 
 def do_join(fnames):
@@ -548,19 +550,18 @@ def do_join(fnames):
                 print(line.rstrip())
                 
 if __name__ == '__main__':
-    null_p = np.array([0.0]), np.array([0.0]), np.array([0.98])
     assert len(sys.argv) >= 3
     verb, noun = sys.argv[1], sys.argv[2]
     if verb == 'plot':
         assert len(sys.argv) > 3
         maxU = float(noun)
         fnames = sys.argv[3:]
-        do_plots(null_p, maxU, fnames)
+        do_plots(maxU, fnames)
     elif verb == 'run':
         vars = ['a1', 'a2', 'b1', 'b2', 'c1', 'c2', 'Ir'] # no dx
         dim = len(vars) # how many parameters (out ot 9) to play with at a time
         key = datetime.now().strftime("%Y%m%d.%H%M%S") # when started
-        do_runs(noun, null_p, vars, dim, key)
+        do_runs(noun, vars, dim, key)
     elif verb == 'join':
         assert len(sys.argv) > 3
         do_join(sys.argv[2:])
